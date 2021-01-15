@@ -54,38 +54,35 @@ class Assistment09(data.Dataset):
             query_skill = skill_sequence[self.max_sequence_len]
             query_correctness = correctness_sequence[self.max_sequence_len]
 
-            question_sequence = question_sequence[0:self.max_sequence_len ]
-            print(' ', self.max_sequence_len -1, len(question_sequence))
-            skill_sequence = skill_sequence[:self.max_sequence_len - 1]
-            correctness_sequence = correctness_sequence[:self.max_sequence_len - 1]
+            question_sequence = question_sequence[:self.max_sequence_len]
+            skill_sequence = skill_sequence[:self.max_sequence_len]
+            correctness_sequence = correctness_sequence[:self.max_sequence_len]
         else:
-            query_question = question_sequence[real_len-1]
-            query_skill = skill_sequence[real_len-1]
-            query_correctness = correctness_sequence[real_len-1]
+            query_question = question_sequence[real_len]
+            query_skill = skill_sequence[real_len]
+            query_correctness = correctness_sequence[real_len]
 
             question_sequence = question_sequence[:-1] + (self.max_sequence_len - real_len) * [0]
             skill_sequence = skill_sequence[:-1] + (self.max_sequence_len - real_len) * [0]
             correctness_sequence = correctness_sequence[:-1] + (self.max_sequence_len - real_len) * [0]
 
-        print(real_len, len(question_sequence))
         return {
-            'user_id': torch.Tensor([user_id]).int(),
-            'real_len': torch.Tensor(real_len),
+            'user_id': torch.LongTensor([user_id]),
+            'real_len': torch.LongTensor([real_len]),
             'question_sequence': torch.LongTensor(question_sequence),
             'skill_sequence': torch.LongTensor(skill_sequence),
             'correctness_sequence': torch.LongTensor(correctness_sequence),
-            'query_question': torch.LongTensor(query_question),
-            'query_skill': torch.LongTensor(int(query_skill)),
-            'query_correctness': torch.LongTensor(query_correctness)
+            'query_question': torch.LongTensor([query_question]),
+            'query_skill': torch.LongTensor([int(query_skill)]),
+            'query_correctness': torch.FloatTensor([query_correctness])
         }
 
-# dataset = Assistment09()
-# print(dataset.__getitem__(0))
+dataset = Assistment09()
 
-# df = pd.read_csv(
-#             'data/skill_builder_data_corrected_small.csv',
-#             dtype={'skill_name': 'str'},
-#             usecols=['user_id','assistment_id', 'problem_id', 'skill_id', 'correct', 'order_id', 'assistment_id', 'skill_name'],
-#         )
-#
-# print(df['skill_id'].drop_duplicates().count())
+df = pd.read_csv(
+            'data/skill_builder_data_corrected_big.csv',
+            dtype={'skill_name': 'str'},
+            usecols=['user_id','assistment_id', 'problem_id', 'skill_id', 'correct', 'order_id', 'assistment_id', 'skill_name'],
+        )
+
+print(df['user_id'].drop_duplicates().count())

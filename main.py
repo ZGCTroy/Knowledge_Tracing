@@ -5,6 +5,7 @@ import os
 from network.DKT import DKT
 from network.MyBert import MyBertModel
 from solver.MyBertSolver import MyBertSolver
+from solver.MyDKTSolver import MyDKTSolver
 from solver.DKTSolver import DKTSolver
 
 def setup_seed(seed):
@@ -22,8 +23,9 @@ if __name__ == '__main__':
     setup_seed(41)
 
     QUESTION_MAX_NUM = 200000
-    EMBEDDING_DIM = 400
-    MAX_SEQUENCE_LEN = 40
+    EMBEDDING_DIM = 100
+    MAX_SEQUENCE_LEN = 200
+    SKILL_NUM = 112
 
     # my_bert_model = MyBertModel(
     #     vocab_size=QUESTION_MAX_NUM, # number of different problem id
@@ -56,29 +58,35 @@ if __name__ == '__main__':
 
     print('start DKT training')
     DKT_model = DKT(
-        vocab_size = QUESTION_MAX_NUM,
-        embedding_dim = EMBEDDING_DIM,
+        vocab_size = 2*SKILL_NUM+1,
+        embedding_dim = 100,
         hidden_dim= 100,
         num_layers=1,
-        max_sequence_len= MAX_SEQUENCE_LEN,
+        output_dim = SKILL_NUM,
         dropout = 0.2
     )
 
     DKT_solver = DKTSolver(
         model = DKT_model,
-        embedding_model= "my_bert_model",
         model_name='DKT',
         model_checkpoints_dir='model_checkpoints',
-        data_path='data/skill_builder_data_corrected_small.csv',
-        device=torch.device(self.cuda if torch.cuda.is_available() else "cpu"),
-        batch_size=20,
-        optimizer=torch.optim.SGD(DKT_model.parameters(), lr=0.5),
+        data_path='data/skill_builder_data_corrected_preprocessed.csv',
+        device=torch.device('cuda:0' if torch.cuda.is_available() else "cpu"),
+        batch_size=64,
+        optimizer=torch.optim.SGD(DKT_model.parameters(), lr=0.001),
         use_pretrained_embedding=False,
         max_sequence_len=MAX_SEQUENCE_LEN,
+        skill_num = SKILL_NUM
     )
+    # DKT_solver.load_model(path='model_checkpoints/DKT_best_train.pt')
+
     DKT_solver.train(
-        epochs = 10,
+        epochs = 50,
         load_model_path=""
     )
+
+    DKT_solver.load_model(path='model_checkpoints/DKT_best_train.pt')
+    DKT_solver.test(DKT_solver.model)
+
 
 

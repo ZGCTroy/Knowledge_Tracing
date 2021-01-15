@@ -2,7 +2,7 @@ import math
 import os
 import time
 
-import sklearn
+import sklearn.metrics
 import torch
 from torch import utils
 
@@ -10,12 +10,11 @@ from DataSet import Assistment09
 
 
 class DKTSolver():
-    def __init__(self, model, embedding_model, data_path, device, batch_size, optimizer, model_checkpoints_dir,
-                 model_name, use_pretrained_embedding, max_sequence_len):
+    def __init__(self, model, data_path, device, batch_size, optimizer, model_checkpoints_dir,
+                 model_name, use_pretrained_embedding, max_sequence_len, skill_num):
         self.model_name = model_name
         self.model = model
         self.best_model = model
-        self.embedding_model = embedding_model
         self.model_checkpoints_dir = model_checkpoints_dir
         self.train_data_loader = []
         self.test_data_loader = []
@@ -27,6 +26,7 @@ class DKTSolver():
         self.scheduler = []
         self.use_pretrained_embedding = use_pretrained_embedding
         self.max_sequence_len = max_sequence_len
+        self.skill_num = skill_num
 
         self.load_data()
 
@@ -73,7 +73,6 @@ class DKTSolver():
     def train_one_epoch(self, cur_epoch):
         self.model.train()
         total_loss = 0.
-        criterion = torch.nn.CrossEntropyLoss()
         start_time = time.time()
 
         batch = 0
@@ -81,18 +80,25 @@ class DKTSolver():
 
         for data in self.train_data_loader:
 
-            question_sequence = data['question_sequence']
-            correctness_sequence = data['correct_sequence']
             skill_sequence = data['skill_sequence']
-            query_question = data['query_question']
+            correctness_sequence = data['correctness_sequence']
             query_skill = data['query_skill']
+            query_correctness = data['query_correctness']
+            real_len = data['real_len']
 
-            output = self.model(skill_sequence, query_question, use_pretrained_embedding=False)
 
-            loss = criterion(output.view(-1), last_is_correct.view(-1))
+            input = torch.where(correctness_sequence == 1, skill_sequence + self.skill_num, skill_sequence)
+
+            correct_probability = self.model(input, query_skill, real_len)
+
+            loss = torch.nn.BCELoss()(
+                correct_probability,
+                query_correctness
+            )
+
+            # 防止梯度爆炸的梯度截断，梯度超过0.5就截断
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 50.0)
             loss.backward()
-
-            # torch.nn.utils.clip_grad_norm_(self.model.parameters(), 0.5)
             self.optimizer.step()
 
             total_loss += loss.item()
@@ -113,7 +119,7 @@ class DKTSolver():
 
     def train(self, epochs, load_model_path=""):
         best_val_loss = float("inf")
-        best_auc = float("inf")
+        best_auc = 0.5
         best_acc = float("inf")
 
         if load_model_path:
@@ -138,48 +144,51 @@ class DKTSolver():
                                                                         val_loss, math.exp(val_loss), auc, acc))
             print('-' * 89)
 
-            if val_loss < best_val_loss:
+            if auc > best_auc:
                 best_val_loss = val_loss
                 best_auc = auc
                 best_acc = acc
                 self.best_model = self.model
                 self.save_model(path=self.model_checkpoints_dir + '/' + self.model_name + '_best_train.pt')
 
-            self.scheduler.step()
+           # self.scheduler.step()
 
     def evaluate(self, model, data_loader):
 
         model.eval()
         total_loss = 0.
-        criterion = torch.nn.CrossEntropyLoss()
-        src_mask = self.embedding_model.generate_square_subsequent_mask(self.batch_size).to(self.device)
+        total_predictions = []
+        total_query_correctness = []
+        total_correct_probability = []
+        auc = 0
+        acc = 0
 
         with torch.no_grad():
             for data in data_loader:
-                question_sequence = data['question_sequence']
-                last_response_pos = data['last_pos']
-                last_is_correct = data['last_correct']
-                correct_sequence = data['correct_sequence']
-                query_question = data['query_question']
+                skill_sequence = data['skill_sequence']
+                correctness_sequence = data['correctness_sequence']
+                query_correctness = data['query_correctness']
+                query_skill = data['query_skill']
+                real_len = data['real_len']
 
-                if self.use_pretrained_embedding:
-                    if question_sequence.size(0) != self.batch_size:
-                        src_mask = self.embedding_model.generate_square_subsequent_mask(question_sequence.size(0)).to(
-                            self.device)
-                    embedding_vector1, embedding_vector2, embedding_vector3, = self.embedding_model.get_embedding_vector(
-                        question_sequence, src_mask)
-                    embedding_vector = embedding_vector1 + embedding_vector2 + embedding_vector3
-                    embedded_query_question = embedding_vector[:, -1, :]
-                    output = model(embedding_vector[:, :-2, :], embedded_query_question, use_pretrained_embedding=True)
-                else:
-                    output = model(question_sequence[:, -2], query_question, use_pretrained_embedding=False)
+                input = torch.where(correctness_sequence == 1, skill_sequence + self.skill_num, skill_sequence )
 
-                # output = (batch_size, 1), representing the probability of correctly answering the qt
-                loss = criterion(output.view(-1), last_is_correct.view(-1))
+                correct_probability = self.model(input, query_skill, real_len)
+
+                loss = torch.nn.BCELoss()(
+                    correct_probability,
+                    query_correctness
+                )
                 total_loss += loss
 
-                auc = sklearn.metrics.roc_auc_score(output.view(-1), last_is_correct.view(-1))
-                acc = sklearn.metrics.accuracy_score(output.view(-1), last_is_correct.view(-1))
+                predictions = torch.where(correct_probability > 0.5, 1, 0)
+                total_predictions.extend(predictions.squeeze(-1).data.cpu().numpy())
+                total_query_correctness.extend(query_correctness.squeeze(-1).data.cpu().numpy())
+                total_correct_probability.extend(correct_probability.squeeze(-1).data.cpu().numpy())
+
+            auc = sklearn.metrics.roc_auc_score(total_query_correctness, total_correct_probability)
+
+            acc = sklearn.metrics.accuracy_score(total_query_correctness, total_predictions)
 
         return total_loss / (len(data_loader.dataset) - 1), auc, acc
 
@@ -201,17 +210,3 @@ class DKTSolver():
         print('New model is better, start saving ......')
         torch.save(self.model.state_dict(), path)
         print('Save model in {} successfully\n'.format(path))
-
-# if self.use_pretrained_embedding:
-#     if question_sequence.size(0) != self.batch_size:
-#         src_mask = self.embedding_model.generate_square_subsequent_mask(question_sequence.size(0)).to(
-#             self.device)
-#     embedding_vector1, embedding_vector2, embedding_vector3, = self.embedding_model.get_embedding_vector(
-#         question_sequence, src_mask)
-#     embedding_vector = embedding_vector1 + embedding_vector2 + embedding_vector3
-#     embedded_query_question = embedding_vector[:, -1, :]
-#     output = self.model(embedding_vector[:, :-2, :], embedded_query_question, use_pretrained_embedding=True)
-# else:
-
-
-

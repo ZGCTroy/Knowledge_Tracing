@@ -3,3 +3,9 @@
 *.iml
 *.pyc
 venv/
+model_checkpoints/MyBert_best_train_01_13.pt
+data/skill_builder_data_corrected_big_preprocessed.csv
+data/skill_builder_data_corrected_big.csv
+data/skill_builder_data_corrected.csv
+data/skill_builder_data_corrected_small_preprocessed.csv
+*.pt
