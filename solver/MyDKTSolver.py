@@ -81,6 +81,8 @@ class MyDKTSolver():
 
         for data in self.train_data_loader:
 
+            self.optimizer.zero_grad()
+
             question_sequence = data['question_sequence']
             correctness_sequence = data['correct_sequence']
             skill_sequence = data['skill_sequence']

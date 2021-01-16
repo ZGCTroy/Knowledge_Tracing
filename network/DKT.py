@@ -11,6 +11,7 @@ class DKT(nn.Module):
 
     def __init__(self, vocab_size, embedding_dim, hidden_dim, output_dim, num_layers, dropout):
         super().__init__()
+        self.model_name = 'DKT'
         self._hidden_dim = hidden_dim
         self._num_layers = num_layers
 

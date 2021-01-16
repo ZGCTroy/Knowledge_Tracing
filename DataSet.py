@@ -54,17 +54,24 @@ class Assistment09(data.Dataset):
             query_skill = skill_sequence[self.max_sequence_len]
             query_correctness = correctness_sequence[self.max_sequence_len]
 
+            # select pre max seq len
             question_sequence = question_sequence[:self.max_sequence_len]
             skill_sequence = skill_sequence[:self.max_sequence_len]
             correctness_sequence = correctness_sequence[:self.max_sequence_len]
+
+            # # select post max seq len
+            # question_sequence = question_sequence[-self.max_sequence_len:]
+            # skill_sequence = skill_sequence[-self.max_sequence_len:]
+            # correctness_sequence = correctness_sequence[-self.max_sequence_len:]
         else:
             query_question = question_sequence[real_len]
             query_skill = skill_sequence[real_len]
             query_correctness = correctness_sequence[real_len]
 
-            question_sequence = question_sequence[:-1] + (self.max_sequence_len - real_len) * [0]
-            skill_sequence = skill_sequence[:-1] + (self.max_sequence_len - real_len) * [0]
-            correctness_sequence = correctness_sequence[:-1] + (self.max_sequence_len - real_len) * [0]
+            padding = (self.max_sequence_len - real_len) * [0]
+            question_sequence = padding + question_sequence[:-1]
+            skill_sequence = padding + skill_sequence[:-1]
+            correctness_sequence = padding + correctness_sequence[:-1]
 
         return {
             'user_id': torch.LongTensor([user_id]),
@@ -76,13 +83,13 @@ class Assistment09(data.Dataset):
             'query_skill': torch.LongTensor([int(query_skill)]),
             'query_correctness': torch.FloatTensor([query_correctness])
         }
-
-dataset = Assistment09()
-
-df = pd.read_csv(
-            'data/skill_builder_data_corrected_big.csv',
-            dtype={'skill_name': 'str'},
-            usecols=['user_id','assistment_id', 'problem_id', 'skill_id', 'correct', 'order_id', 'assistment_id', 'skill_name'],
-        )
-
-print(df['user_id'].drop_duplicates().count())
+#
+# dataset = Assistment09()
+#
+# df = pd.read_csv(
+#             'data/skill_builder_data_corrected_big.csv',
+#             dtype={'skill_name': 'str'},
+#             usecols=['user_id','assistment_id', 'problem_id', 'skill_id', 'correct', 'order_id', 'assistment_id', 'skill_name'],
+#         )
+#
+# print(df['user_id'].drop_duplicates().count())
