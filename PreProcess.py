@@ -27,10 +27,10 @@ def pre_process(root_dir, filename):
         os.path.join(root_dir, filename) + '.csv',
         dtype={'skill_name': 'str'},
         usecols=['user_id', 'assistment_id', 'problem_id', 'skill_id', 'correct', 'order_id', 'assistment_id',
-                 'skill_name'],
+                 'skill_name','attempt_count'],
     )
 
-    df = df[['user_id', 'problem_id', 'skill_id', 'correct', 'order_id', 'assistment_id', 'skill_name']]
+    df = df[['user_id', 'problem_id', 'skill_id', 'correct', 'order_id', 'attempt_count','assistment_id', 'skill_name']]
     df = df.dropna().drop_duplicates()
     df = df.sort_values(by=['user_id', 'order_id', 'problem_id'])
     df = df.reset_index()

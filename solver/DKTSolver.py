@@ -9,11 +9,12 @@ from solver.Solver import Solver
 
 class DKTSolver(Solver):
 
-    def __init__(self, model, data_path, models_checkpoints_dir, tensorboard_log_dir, optimizer, cuda, batch_size,
+    def __init__(self, model, log_name, data_path, models_checkpoints_dir, tensorboard_log_dir, optimizer, cuda, batch_size,
                  max_sequence_len,
                  skill_num, num_workers=1):
         super(DKTSolver, self).__init__(
             model=model,
+            log_name=log_name,
             data_path=data_path,
             batch_size=batch_size,
             max_sequence_len=max_sequence_len,
@@ -24,6 +25,14 @@ class DKTSolver(Solver):
             num_workers=num_workers,
         )
         self.skill_num = skill_num
+        self.writer.add_graph(
+            self.model,
+            input_to_model=[
+                torch.ones(size=(64, 200)).long(),
+                torch.ones(size=(64, 1)).long(),
+            ]
+        )
+
 
     def run_one_epoch(self, model, cur_epoch = 1, mode = ''):
         if mode == 'train':
@@ -44,14 +53,23 @@ class DKTSolver(Solver):
             self.optimizer.zero_grad()
 
             skill_sequence = data['skill_sequence']
+            question_sequence =data['question_sequence']
             correctness_sequence = data['correctness_sequence']
             query_skill = data['query_skill']
+            query_question = data['query_question']
             query_correctness = data['query_correctness']
-            real_len = data['real_len']
 
-            input = torch.where(correctness_sequence == 1, skill_sequence + self.skill_num, skill_sequence)
+            # SkillLevel
+            input = skill_sequence
+            query = query_skill
 
-            correctness_probability = self.model(input, query_skill, real_len)
+            # QuestionLevel
+            # input = question_sequence
+            # query = query_question
+
+            input = torch.where(correctness_sequence == 1, input + self.skill_num, input)
+
+            correctness_probability = self.model(input, query)
 
             loss = torch.nn.BCELoss()(
                 correctness_probability,
