@@ -24,24 +24,25 @@ def test_Baseline_DKT():
     QUESTION_MAX_NUM = 16891 + 1
     MAX_SEQUENCE_LEN = 200
     SKILL_NUM = 111 + 1
-    EMBEDDING_DIM = SKILL_NUM
+    EMBEDDING_DIM = 100
+    HIDDEN_DIM = 100
     BATCH_SIZE = 64
 
     DKT_model = DKT(
         vocab_size=2 * SKILL_NUM + 1,
         embedding_dim=EMBEDDING_DIM,
-        hidden_dim=100,
+        hidden_dim=HIDDEN_DIM,
         num_layers=1,
         output_dim=SKILL_NUM,
         dropout=0.2
     )
 
     DKT_solver = DKTSolver(
-        log_name= 'SkillLevel_Baseline2',
+        log_name= 'SkillLevel/Baseline',
         model=DKT_model,
         models_checkpoints_dir='./models_checkpoints',
         tensorboard_log_dir='./tensorboard_logs',
-        data_path='data/skill_builder_data_corrected_preprocessed.csv',
+        data_path='data/skill_builder_data_corrected_preprocessed',
         cuda='cuda:0',
         batch_size=BATCH_SIZE,
         optimizer=torch.optim.Adam(DKT_model.parameters(), lr=0.001),
@@ -50,47 +51,42 @@ def test_Baseline_DKT():
         num_workers=1
     )
 
-    # DKT_solver.load_model(path='models_checkpoints/DKT.pt')
+    DKT_solver.load_model(path='models_checkpoints/DKT/SkillLevel/Baseline.pt')
 
-    DKT_solver.train(epochs=50)
-    DKT_solver.test(DKT_solver.model)
+    # DKT_solver.train(epochs=50)
+    DKT_solver.test(DKT_solver.model,mode='val')
+    DKT_solver.test(DKT_solver.model,mode = 'test')
 
-    # DKT_solver.load_model(path='models_checkpoints/DKT_best_train_skillLevel_post.pt')
-
+    # DKT_solver.load_model(path='models_checkpoints/DK/SkillLevel/Baseline2.pt')
 
 def test_MFDKT():
-    USER_MAX_NUM = 4151
+    MAX_USER_NUM = 4151 +1
     QUESTION_MAX_NUM = 16891 + 1
-    MAX_ATTEMPT_NUM = 100
+    MAX_ATTEMPT_NUM = 5 + 1
     MAX_SEQUENCE_LEN = 200
     SKILL_NUM = 111 + 1
-    EMBEDDING_DIM = SKILL_NUM
+    EMBEDDING_DIM = 100
+    HIDDEN_DIM = 100
     BATCH_SIZE = 64
-
-    # MF_model = MF(
-    #     user_num=USER_MAX_NUM,
-    #     skill_num=SKILL_NUM,
-    #     max_attempt_num=100,
-    #     embedding_dim=EMBEDDING_DIM
-    # )
 
     MFDKT_model = MFDKT(
         vocab_size=2 * SKILL_NUM + 1,
         embedding_dim=EMBEDDING_DIM,
-        hidden_dim=100,
+        hidden_dim=HIDDEN_DIM,
         num_layers=1,
         output_dim=SKILL_NUM,
         dropout=0.2,
-        attempt_num=50
+        user_num= MAX_USER_NUM,
+        max_seq_len=MAX_SEQUENCE_LEN,
+        skill_num = SKILL_NUM
     )
 
-    # 'MF_skill+attempt_AddBeforeLSTM'
     MFDKT_solver = DKTMFSolver(
-        log_name='DKT_BaseLine',
+        log_name= 'InsideLSTM/UserId+Skill/DirectAdd',
         model=MFDKT_model,
         models_checkpoints_dir='./models_checkpoints',
         tensorboard_log_dir='./tensorboard_logs',
-        data_path='data/skill_builder_data_corrected_preprocessed.csv',
+        data_path='data/skill_builder_data_corrected_preprocessed',
         cuda='cuda:0',
         batch_size=BATCH_SIZE,
         optimizer=torch.optim.Adam(MFDKT_model.parameters(), lr=0.001),
@@ -99,12 +95,23 @@ def test_MFDKT():
         num_workers=1
     )
 
-    # MFDKT_solver.load_model(path='models_checkpoints/DKT.pt')
-    #
-    MFDKT_solver.train(epochs=50)
-    # MFDKT_solver.test(MFDKT_solver.model)
 
-    # MFDKT_solver.load_model(path='models_checkpoints/DKT_best_train_skillLevel_post.pt')
+    # MFDKT_solver.train(epochs=50)
+
+
+    MFDKT_solver.load_model(path='models_checkpoints/MFDKT/InsideLSTM/UserId+Skill/DirectAdd.pt')
+
+    MFDKT_solver.test(MFDKT_solver.model,mode='val')
+    MFDKT_solver.test(MFDKT_solver.model, mode='test')
+
+    print('MFDKT_solver.model.MF.embedding_layer1:\n', MFDKT_solver.model.MF.embedding_layer1 )
+
+    array = MFDKT_solver.model.MF.embedding_layer1.weight.detach().numpy()
+
+    print(array)
+    np.savetxt('S-K',array, fmt='%.04f')
+    array = np.loadtxt('S-K')
+    print(array)
 
 
 if __name__ == '__main__':

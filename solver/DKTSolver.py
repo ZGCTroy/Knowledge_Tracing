@@ -25,13 +25,13 @@ class DKTSolver(Solver):
             num_workers=num_workers,
         )
         self.skill_num = skill_num
-        self.writer.add_graph(
-            self.model,
-            input_to_model=[
-                torch.ones(size=(64, 200)).long(),
-                torch.ones(size=(64, 1)).long(),
-            ]
-        )
+        # self.writer.add_graph(
+        #     self.model,
+        #     input_to_model=[
+        #         torch.ones(size=(64, 200)).long(),
+        #         torch.ones(size=(64, 1)).long(),
+        #     ]
+        # )
 
 
     def run_one_epoch(self, model, cur_epoch = 1, mode = ''):
@@ -85,7 +85,7 @@ class DKTSolver(Solver):
 
             # 防止梯度爆炸的梯度截断，梯度超过0.5就截断
             if mode == 'train':
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+                # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
                 loss.backward()
                 self.optimizer.step()
 

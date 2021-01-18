@@ -10,3 +10,10 @@ data/skill_builder_data_corrected.csv
 data/skill_builder_data_corrected_small_preprocessed.csv
 tensorboard_logs/*
 *.pt
+data/skill_builder_data_corrected_big_preprocessed_test.csv
+data/skill_builder_data_corrected_big_preprocessed_train.csv
+data/skill_builder_data_corrected_big_preprocessed_val.csv
+data/skill_builder_data_corrected_small_preprocessed_test.csv
+data/skill_builder_data_corrected_small_preprocessed_train.csv
+data/skill_builder_data_corrected_small_preprocessed_val.csv
+S-K

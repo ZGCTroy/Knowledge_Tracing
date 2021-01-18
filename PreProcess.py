@@ -14,13 +14,24 @@ pd.set_option('max_colwidth', 1000)
 pd.set_option('expand_frame_repr', False)
 
 
-def transform(df, col_name):
+def label_transform(df, col_name):
     label_encoder = LabelEncoder()
     df[col_name] = label_encoder.fit_transform(df[col_name]) + 1
     mapping = {index: label for index, label in enumerate(label_encoder.classes_)}
     # print(mapping)
     return df
 
+def category_transform(serie):
+    # serie = pd.cut(x=serie, bins=[-1,0,1,2,3,10000], labels=[0,1,2,3,4])
+    def mapping(x):
+        if x >= 4:
+            return 4 + 1
+        else:
+            return x + 1
+
+    serie = serie.map(mapping)
+
+    return serie
 
 def pre_process(root_dir, filename):
     df = pd.read_csv(
@@ -35,19 +46,50 @@ def pre_process(root_dir, filename):
     df = df.sort_values(by=['user_id', 'order_id', 'problem_id'])
     df = df.reset_index()
 
-    print('Before : ')
-    print(df.head(5))
-    print()
-    df = transform(df, 'user_id')
-    df = transform(df, 'skill_id')
-    df = transform(df, 'problem_id')
-    print('After: ')
-    print(df.head(5))
-    print()
-    print()
+    df = label_transform(df, 'user_id')
+    df = label_transform(df, 'skill_id')
+    df = label_transform(df, 'problem_id')
+
+    df['attempt_count'] = category_transform(df['attempt_count'])
+
+    grouped_df = df.groupby('user_id')
+    users_list = list(grouped_df.groups.keys())
+
+    train_df = pd.DataFrame()
+    val_df = pd.DataFrame()
+    test_df = pd.DataFrame()
+
+    for user_id in users_list:
+        user_df = grouped_df.get_group(user_id)
+        if (len(user_df)) >= 30:
+            train_len = int(len(user_df) * 0.7 )
+            temp_test_df = user_df.iloc[train_len:]
+            temp_train_df = user_df.iloc[0:train_len]
+            train_len = int(train_len *0.8)
+            temp_val_df = temp_train_df.iloc[train_len:]
+            temp_train_df = temp_train_df.iloc[0:train_len]
+            train_df = pd.concat([train_df, temp_train_df])
+            test_df = pd.concat([test_df, temp_test_df])
+            val_df = pd.concat([val_df,temp_val_df])
+
 
     df.to_csv(
         os.path.join(root_dir, filename + '_preprocessed.csv'),
+        mode='w',
+        index=0
+    )
+    train_df.to_csv(
+        os.path.join(root_dir, filename + '_preprocessed_train.csv'),
+        mode='w',
+        index=0
+    )
+    test_df.to_csv(
+        os.path.join(root_dir, filename + '_preprocessed_test.csv'),
+        mode='w',
+        index=0
+    )
+    val_df.to_csv(
+        os.path.join(root_dir, filename + '_preprocessed_val.csv'),
         mode='w',
         index=0
     )

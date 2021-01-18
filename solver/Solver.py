@@ -42,31 +42,35 @@ class Solver():
         self.load_data(path=data_path)
         self.log_name = log_name
         self.local_time = str(time.asctime(time.localtime(time.time())))
-        log_dir = self.tensorboard_log_dir + '/' + self.model.model_name + '/' + self.log_name
+        self.log_dir = self.tensorboard_log_dir + '/' + self.model.model_name + '/' + self.log_name
 
-        self.writer = SummaryWriter(log_dir=log_dir)
+
 
     def load_data(self, path):
 
-        dataset = Assistment09(path=path, max_sequence_len=self.max_sequence_len)
+        # dataset = Assistment09(path=path, max_sequence_len=self.max_sequence_len)
+        #
+        # train_size = int(0.7 * len(dataset))
+        # test_size = len(dataset) - train_size
+        #
+        # train_dataset, test_dataset = torch.utils.data.random_split(
+        #     dataset,
+        #     [train_size, test_size],
+        #     generator=torch.Generator().manual_seed(41)
+        # )
+        #
+        # train_size = int(0.8 * len(train_dataset))
+        # val_size = len(dataset) - train_size - test_size
+        #
+        # train_dataset, val_dataset = torch.utils.data.random_split(
+        #     train_dataset,
+        #     [train_size, val_size],
+        #     generator=torch.Generator().manual_seed(41)
+        # )
 
-        train_size = int(0.7 * len(dataset))
-        test_size = len(dataset) - train_size
-
-        train_dataset, test_dataset = torch.utils.data.random_split(
-            dataset,
-            [train_size, test_size],
-            generator=torch.Generator().manual_seed(41)
-        )
-
-        train_size = int(0.8 * len(train_dataset))
-        val_size = len(dataset) - train_size - test_size
-
-        train_dataset, val_dataset = torch.utils.data.random_split(
-            train_dataset,
-            [train_size, val_size],
-            generator=torch.Generator().manual_seed(41)
-        )
+        train_dataset = Assistment09(path=path+'_train.csv', max_sequence_len=self.max_sequence_len)
+        val_dataset = Assistment09(path=path+'_val.csv', max_sequence_len=self.max_sequence_len)
+        test_dataset = Assistment09(path=path+'_test.csv', max_sequence_len=self.max_sequence_len)
 
         self.data_loader['train'] = torch.utils.data.DataLoader(
             train_dataset,
@@ -91,6 +95,7 @@ class Solver():
 
     def train(self, epochs):
 
+        self.writer = SummaryWriter(log_dir=self.log_dir)
         # self.writer.add_hparams({'optimizer'})
 
         best_val_loss, best_val_auc, best_val_acc = self.run_one_epoch(self.model, mode='val')
@@ -144,15 +149,17 @@ class Solver():
         # self.scheduler.step()
         self.writer.close()
 
-    def test(self, model):
-        test_loss, auc, acc = self.run_one_epoch(model, mode='test')
+    def test(self, model, mode='test'):
+        test_loss, auc, acc = self.run_one_epoch(model, mode=mode)
         print('=' * 89)
-        print('| test loss {:5.2f} | test ppl {:8.2f} | auc {:5.2f} | acc {:5.2f}'.format(
-            test_loss, math.exp(test_loss), auc, acc))
+        print('{}| {} | loss {:5.2f} | ppl {:8.2f} | auc {:5.2f} | acc {:5.2f}'.format(
+            model.model_name,mode, test_loss, math.exp(test_loss), auc, acc))
         print('=' * 89)
 
     def save_model(self, path):
         print('New model is better, start saving ......')
+        if not os.path.exists(os.path.dirname(path)):
+            os.makedirs(os.path.dirname(path))
         torch.save(self.model.state_dict(), path)
         print('Save model in {} successfully\n'.format(path))
 
