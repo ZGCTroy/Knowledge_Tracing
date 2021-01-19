@@ -113,6 +113,7 @@ class Solver():
             train_loss, train_auc, train_acc = self.run_one_epoch(self.model, cur_epoch=epoch, mode='train')
 
             val_loss, val_auc, val_acc = self.run_one_epoch(self.model, mode='val')
+            test_loss, test_auc, test_acc = self.run_one_epoch(self.model, mode='test')
 
             print('-' * 89)
             print('| end of epoch {:3d} | time: {:5.2f}s | train loss {:5.2f} | '
@@ -124,17 +125,24 @@ class Solver():
                   'valid ppl {:8.2f} | val AUC {:.5f} | val ACC{:.5f}'.format(epoch, (time.time() - epoch_start_time),
                                                                               val_loss, math.exp(val_loss), val_auc,
                                                                               val_acc))
+            print('| end of epoch {:3d} | time: {:5.2f}s | test loss {:5.2f} | '
+                  'test ppl {:8.2f} | test AUC {:.5f} | test ACC{:.5f}'.format(epoch, (time.time() - epoch_start_time),
+                                                                              test_loss, math.exp(test_loss), test_auc,
+                                                                              test_acc))
             print('-' * 89)
 
-            self.writer.add_scalars('ACC/train_val', {'train acc': train_acc, 'val acc': val_acc}, epoch)
+            # self.writer.add_scalars('ACC/train_val', {'train acc': train_acc, 'val acc': val_acc}, epoch)
             self.writer.add_scalar('ACC/train', train_acc, epoch)
             self.writer.add_scalar('ACC/val', val_acc, epoch)
-            self.writer.add_scalars('AUC/train_val', {'train auc': train_auc, 'val auc': val_auc}, epoch)
+            self.writer.add_scalar('ACC/test', test_acc, epoch)
+            # self.writer.add_scalars('AUC/train_val', {'train auc': train_auc, 'val auc': val_auc}, epoch)
             self.writer.add_scalar('AUC/train', train_auc, epoch)
             self.writer.add_scalar('AUC/val', val_auc, epoch)
-            self.writer.add_scalars('LOSS/train_val', {'train loss': train_loss, 'val loss': val_loss}, epoch)
+            self.writer.add_scalar('AUC/test', test_auc, epoch)
+            # self.writer.add_scalars('LOSS/train_val', {'train loss': train_loss, 'val loss': val_loss}, epoch)
             self.writer.add_scalar('LOSS/train', train_loss, epoch)
             self.writer.add_scalar('LOSS/val', val_loss, epoch)
+            self.writer.add_scalar('LOSS/test', test_loss, epoch)
             for i, (name, param) in enumerate(self.model.named_parameters()):
                 if 'bn' not in name:
                     self.writer.add_histogram(name, param, epoch)

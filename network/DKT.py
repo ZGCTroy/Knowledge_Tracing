@@ -14,7 +14,6 @@ class DKT(nn.Module):
         self.model_name = 'DKT'
         self._hidden_dim = hidden_dim
         self._num_layers = num_layers
-
         self._encoder = nn.Embedding(num_embeddings=vocab_size, embedding_dim=embedding_dim, padding_idx=PAD_INDEX)
         self._lstm = nn.LSTM(embedding_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=dropout)
         self._decoder = nn.Linear(hidden_dim, output_dim)

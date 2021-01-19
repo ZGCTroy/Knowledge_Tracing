@@ -92,6 +92,7 @@ class Assistment09(data.Dataset):
         skill_sequence = list(user_df['skill_id'])
         correctness_sequence = list(user_df['correct'])
         attempt_sequence = list(user_df['attempt_count'])
+        correctness_ratio_sequence = list(user_df['same_skill_correctness_ratio'])
 
         real_len = len(question_sequence) - 1
 
@@ -105,11 +106,13 @@ class Assistment09(data.Dataset):
             skill_sequence = skill_sequence[:self.max_sequence_len]
             correctness_sequence = correctness_sequence[:self.max_sequence_len]
             attempt_sequence = attempt_sequence[:self.max_sequence_len]
+            correctness_ratio_sequence =  correctness_ratio_sequence[:self.max_sequence_len]
 
             # # select post max seq len
             # question_sequence = question_sequence[-self.max_sequence_len:]
             # skill_sequence = skill_sequence[-self.max_sequence_len:]
             # correctness_sequence = correctness_sequence[-self.max_sequence_len:]
+            # correctness_ratio_sequence = correctness_ratio_sequence[self.max_sequence_len:]
         else:
             query_question = question_sequence[real_len]
             query_skill = skill_sequence[real_len]
@@ -120,6 +123,7 @@ class Assistment09(data.Dataset):
             skill_sequence = padding + skill_sequence[:-1]
             correctness_sequence = padding + correctness_sequence[:-1]
             attempt_sequence = padding + attempt_sequence[:-1]
+            correctness_ratio_sequence = padding + correctness_ratio_sequence[:-1]
 
         return {
             'user_id': torch.LongTensor([user_id]),
@@ -127,7 +131,8 @@ class Assistment09(data.Dataset):
             'question_sequence': torch.LongTensor(question_sequence),
             'skill_sequence': torch.LongTensor(skill_sequence),
             'correctness_sequence': torch.LongTensor(correctness_sequence),
-            'attempt_sequence': torch.LongTensor(attempt_sequence),
+            'attempt_sequence': torch.FloatTensor(attempt_sequence),
+            'correctness_ratio_sequence': torch.FloatTensor(correctness_ratio_sequence),
             'query_question': torch.LongTensor([query_question]),
             'query_skill': torch.LongTensor([int(query_skill)]),
             'query_correctness': torch.FloatTensor([query_correctness])

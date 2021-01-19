@@ -8,7 +8,7 @@ class MF(nn.Module):
     LSTM based model
     """
 
-    def __init__(self, user_num, skill_num, embedding_dim, output_dim):
+    def __init__(self, user_num, skill_num, embedding_dim, hidden_dim, output_dim):
         super().__init__()
         self.model_name = 'MF'
         self.embedding_layer1 = nn.Embedding(num_embeddings=user_num, embedding_dim=embedding_dim,
@@ -16,7 +16,8 @@ class MF(nn.Module):
         self.embedding_layer2 = nn.Embedding(num_embeddings=skill_num, embedding_dim=embedding_dim,
                                              padding_idx=PAD_INDEX)
 
-        self.linear1 = nn.Linear(in_features=2 * embedding_dim, out_features=output_dim)
+        self.linear1 = nn.Linear(in_features=2 * embedding_dim, out_features=hidden_dim)
+        self.decoder = nn.Linear(in_features=output_dim, out_features=output_dim)
 
     def forward(self, user_id_sequence, skill_sequence):
         embedding_vector1 = self.embedding_layer1(user_id_sequence)
@@ -24,9 +25,9 @@ class MF(nn.Module):
 
         embedding_vector = torch.cat([embedding_vector1, embedding_vector2], dim=2)
 
-        output = self.linear1(embedding_vector)
+        hidden_vector = self.linear1(embedding_vector)
 
-        return output
+        return hidden_vector
 
 
 
@@ -100,11 +101,12 @@ class MFDKT(nn.Module):
         ht = torch.zeros_like(embedded_input[:,0,:])
         ct = torch.zeros_like(embedded_input[:,0,:])
         for t in range(0,self.max_seq_len):
-            # Direct Add
-            ht = ht + extended_input[:, t]
+            # SigmoidAdd
+            # ht = ht + torch.sigmoid(extended_input[:, t])
 
-            # Dot
-            ht = ht * extended_input[:, t]
+            # SigmoidDot
+            ht = ht * torch.sigmoid(extended_input[:, t])
+
             # LSTM
             ht, ct = self.LSTMCell(embedded_input[:,t], (ht,ct))
 

@@ -33,6 +33,14 @@ def category_transform(serie):
 
     return serie
 
+def calculate_and_add_correctness_ratio(df):
+    grouped_df = df.groupby(by=['user_id','skill_id'])
+    df['same_skill_total_num'] = grouped_df['correct'].transform(len)
+    df['same_skill_correct_num'] = grouped_df['correct'].transform(sum)
+    df['same_skill_correctness_ratio'] = df['same_skill_correct_num'] / df['same_skill_total_num']
+
+    return df
+
 def pre_process(root_dir, filename):
     df = pd.read_csv(
         os.path.join(root_dir, filename) + '.csv',
@@ -61,16 +69,23 @@ def pre_process(root_dir, filename):
 
     for user_id in users_list:
         user_df = grouped_df.get_group(user_id)
-        if (len(user_df)) >= 30:
-            train_len = int(len(user_df) * 0.7 )
-            temp_test_df = user_df.iloc[train_len:]
-            temp_train_df = user_df.iloc[0:train_len]
-            train_len = int(train_len *0.8)
-            temp_val_df = temp_train_df.iloc[train_len:]
-            temp_train_df = temp_train_df.iloc[0:train_len]
-            train_df = pd.concat([train_df, temp_train_df])
-            test_df = pd.concat([test_df, temp_test_df])
-            val_df = pd.concat([val_df,temp_val_df])
+        if (len(user_df)) < 30:
+            continue
+        train_len = int(len(user_df) * 0.7)
+        temp_test_df = user_df.iloc[train_len:]
+        temp_train_df = user_df.iloc[0:train_len]
+        train_len = int(train_len * 0.8)
+        temp_val_df = temp_train_df.iloc[train_len:]
+        temp_train_df = temp_train_df.iloc[0:train_len]
+
+        # 计算 skill正确率
+        temp_train_df = calculate_and_add_correctness_ratio(temp_train_df)
+
+        train_df = pd.concat([train_df, temp_train_df])
+        test_df = pd.concat([test_df, temp_test_df])
+        val_df = pd.concat([val_df, temp_val_df])
+
+
 
 
     df.to_csv(
