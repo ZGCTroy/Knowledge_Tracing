@@ -68,26 +68,29 @@ class Solver():
         #     generator=torch.Generator().manual_seed(41)
         # )
 
-        train_dataset = Assistment09(path=path+'_train.csv', max_sequence_len=self.max_sequence_len)
-        val_dataset = Assistment09(path=path+'_val.csv', max_sequence_len=self.max_sequence_len)
-        test_dataset = Assistment09(path=path+'_test.csv', max_sequence_len=self.max_sequence_len)
+        train_dataset = Assistment09(path=path+'_train.csv', max_seq_len=self.max_sequence_len)
+        val_dataset = Assistment09(path=path+'_val.csv', max_seq_len=self.max_sequence_len)
+        test_dataset = Assistment09(path=path+'_test.csv', max_seq_len=self.max_sequence_len)
 
         self.data_loader['train'] = torch.utils.data.DataLoader(
             train_dataset,
             batch_size=self.batch_size,
             shuffle=True,
+            num_workers = self.num_workers
         )
 
         self.data_loader['val'] = torch.utils.data.DataLoader(
             val_dataset,
             batch_size=self.batch_size,
             shuffle=False,
+            num_workers=self.num_workers
         )
 
         self.data_loader['test'] = torch.utils.data.DataLoader(
             test_dataset,
             batch_size=self.batch_size,
             shuffle=False,
+            num_workers=self.num_workers
         )
 
     def run_one_epoch(self, model, cur_epoch=1, mode=''):
@@ -96,9 +99,9 @@ class Solver():
     def train(self, epochs):
 
         self.writer = SummaryWriter(log_dir=self.log_dir)
-        # self.writer.add_hparams({'optimizer'})
 
-        best_val_loss, best_val_auc, best_val_acc = self.run_one_epoch(self.model, mode='val')
+        with torch.no_grad():
+            best_val_loss, best_val_auc, best_val_acc = self.run_one_epoch(self.model, mode='val')
 
         print('=' * 89)
         print(
@@ -112,8 +115,9 @@ class Solver():
 
             train_loss, train_auc, train_acc = self.run_one_epoch(self.model, cur_epoch=epoch, mode='train')
 
-            val_loss, val_auc, val_acc = self.run_one_epoch(self.model, mode='val')
-            test_loss, test_auc, test_acc = self.run_one_epoch(self.model, mode='test')
+            with torch.no_grad():
+                val_loss, val_auc, val_acc = self.run_one_epoch(self.model, mode='val')
+                test_loss, test_auc, test_acc = self.run_one_epoch(self.model, mode='test')
 
             print('-' * 89)
             print('| end of epoch {:3d} | time: {:5.2f}s | train loss {:5.2f} | '

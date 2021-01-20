@@ -38,7 +38,6 @@ class PreMFDKTSolver(Solver):
         # )
 
     def pre_train(self, epochs=5):
-
         best_val_loss, best_val_auc, best_val_acc = self.run_one_epoch(self.model, mode='val')
 
         print('=' * 89)
@@ -57,6 +56,7 @@ class PreMFDKTSolver(Solver):
                   'train ppl {:8.4f} |'.format(epoch,
                                                (time.time() - epoch_start_time),
                                                train_loss, math.exp(train_loss)))
+            self.save_model(path=self.models_checkpoints_dir + '/' + self.log_name + '.pt')
 
             val_loss, val_auc, val_acc = self.run_one_epoch(self.model, mode='val')
             test_loss, test_auc, test_acc = self.run_one_epoch(self.model, mode='test')
@@ -74,7 +74,7 @@ class PreMFDKTSolver(Solver):
             print('-' * 89)
 
     def pre_train_one_epoch(self, model, cur_epoch=1):
-
+        model.train()
         total_loss = 0.
         start_time = time.time()
         batch_id = 0
@@ -95,7 +95,7 @@ class PreMFDKTSolver(Solver):
 
             output = model.MF.decoder(hidden_vector)
 
-            label = data['attempt_sequence']
+            label = data['correctness_ratio_sequence']
             loss = torch.nn.MSELoss()(
                 output.view(-1, self.max_sequence_len),
                 label.view(-1, self.max_sequence_len)
@@ -131,7 +131,7 @@ class PreMFDKTSolver(Solver):
         total_loss = 0.
         start_time = time.time()
         batch_id = 0
-        log_interval = 5
+        log_interval = 200
         total_predictions = []
         total_query_correctness = []
         total_correct_probability = []
@@ -180,9 +180,9 @@ class PreMFDKTSolver(Solver):
             total_query_correctness.extend(query_correctness.squeeze(-1).data.cpu().numpy())
             total_correct_probability.extend(correctness_probability.squeeze(-1).data.cpu().numpy())
 
-            # 防止梯度爆炸的梯度截断，梯度超过0.5就截断
+            # 防止梯度爆炸的梯度截断，梯度超过5就截断
             if mode == 'train':
-                # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
                 loss.backward()
                 self.optimizer.step()
 

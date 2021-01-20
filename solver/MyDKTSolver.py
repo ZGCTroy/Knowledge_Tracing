@@ -32,7 +32,7 @@ class MyDKTSolver():
 
     def load_data(self):
 
-        dataset = Assistment09(path=self.data_path, max_sequence_len=self.max_sequence_len)
+        dataset = Assistment09(path=self.data_path, max_seq_len=self.max_sequence_len)
 
         train_size = int(0.8 * len(dataset))
         test_size = len(dataset) - train_size

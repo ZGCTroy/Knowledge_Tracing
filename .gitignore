@@ -17,3 +17,6 @@ data/skill_builder_data_corrected_small_preprocessed_test.csv
 data/skill_builder_data_corrected_small_preprocessed_train.csv
 data/skill_builder_data_corrected_small_preprocessed_val.csv
 S-K
+MFDKT_SK
+PreOnlyMFDKT_SK
+PreFinetuneMFDKT_SK

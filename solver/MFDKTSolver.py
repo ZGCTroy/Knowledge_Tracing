@@ -7,13 +7,13 @@ import torch
 from solver.Solver import Solver
 
 
-class DKTMFSolver(Solver):
+class MFDKTSolver(Solver):
 
     def __init__(self, model, log_name,data_path, models_checkpoints_dir, tensorboard_log_dir, optimizer, cuda,
                  batch_size,
                  max_sequence_len,
                  skill_num, num_workers=1):
-        super(DKTMFSolver, self).__init__(
+        super(MFDKTSolver, self).__init__(
             model=model,
             log_name = log_name,
             data_path=data_path,
@@ -46,7 +46,7 @@ class DKTMFSolver(Solver):
         total_loss = 0.
         start_time = time.time()
         batch_id = 0
-        log_interval = 5
+        log_interval = 200
         total_predictions = []
         total_query_correctness = []
         total_correct_probability = []
@@ -55,19 +55,18 @@ class DKTMFSolver(Solver):
 
             self.optimizer.zero_grad()
 
-            skill_sequence = data['skill_sequence']
-            question_sequence = data['question_sequence']
+            skill_id_sequence = data['skill_id_sequence']
+            question_id_sequence = data['question_id_sequence']
             correctness_sequence = data['correctness_sequence']
-            query_skill = data['query_skill']
-            query_question = data['query_question']
+            query_skill_id = data['query_skill_id']
+            query_question_id = data['query_question_id']
             query_correctness = data['query_correctness']
-            attempt_sequence = data['attempt_sequence']
             user_id = data['user_id']
             user_id_sequence = torch.repeat_interleave(user_id.view(-1, 1), repeats=self.max_sequence_len, dim=1)
 
             # SkillLevel
-            input = skill_sequence
-            query = query_skill
+            input = skill_id_sequence
+            query = query_skill_id
 
             # QuestionLevel
             # input = question_sequence
@@ -79,15 +78,14 @@ class DKTMFSolver(Solver):
                 input,
                 query,
                 user_id_sequence,
-                skill_sequence,
-                attempt_sequence
+                skill_id_sequence,
             )
 
             loss = torch.nn.BCELoss()(
                 correctness_probability,
                 query_correctness
             )
-            total_loss += loss.item()
+            total_loss += loss.item() * query_correctness.size()[0]
 
             query_correctness = data['query_correctness']
             predictions = torch.where(correctness_probability > 0.5, 1, 0)
@@ -97,20 +95,19 @@ class DKTMFSolver(Solver):
 
             # 防止梯度爆炸的梯度截断，梯度超过0.5就截断
             if mode == 'train':
-                # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
                 loss.backward()
                 self.optimizer.step()
 
                 if batch_id % log_interval == 0 and batch_id > 0:
-                    cur_loss = total_loss / log_interval
                     elapsed = time.time() - start_time
                     print('| epoch {:3d} | {:5d}/{:5d} batches | '
                           'lr {:02.4f} | ms/batch {:5.2f} | '
                           'loss {:5.3f} | ppl {:8.3f}'.format(
-                        cur_epoch, batch_id, len(self.data_loader['train'].dataset) // self.batch_size,
+                        cur_epoch, batch_id, len(self.data_loader[mode].dataset) // self.batch_size,
                         self.scheduler.get_last_lr()[0],
                                              elapsed * 1000 / log_interval,
-                        cur_loss, math.exp(cur_loss)))
+                        loss.item(), math.exp(loss.item())))
 
                 start_time = time.time()
 

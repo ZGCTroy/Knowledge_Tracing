@@ -3,52 +3,52 @@ import torch.nn as nn
 
 PAD_INDEX = 0
 
-class MF(nn.Module):
-    """
-    LSTM based model
-    """
-
-    def __init__(self, user_num, skill_num, embedding_dim, hidden_dim, output_dim):
-        super().__init__()
-        self.model_name = 'MF'
-        self.embedding_layer1 = nn.Embedding(num_embeddings=user_num, embedding_dim=embedding_dim,
-                                             padding_idx=PAD_INDEX)
-        self.embedding_layer2 = nn.Embedding(num_embeddings=skill_num, embedding_dim=embedding_dim,
-                                             padding_idx=PAD_INDEX)
-
-        self.linear1 = nn.Linear(in_features=2 * embedding_dim, out_features=hidden_dim)
-        self.decoder = nn.Linear(in_features=output_dim, out_features=output_dim)
-
-    def forward(self, user_id_sequence, skill_sequence):
-        embedding_vector1 = self.embedding_layer1(user_id_sequence)
-        embedding_vector2 = self.embedding_layer2(skill_sequence)
-
-        embedding_vector = torch.cat([embedding_vector1, embedding_vector2], dim=2)
-
-        hidden_vector = self.linear1(embedding_vector)
-
-        return hidden_vector
-
-
-
-
 # class MF(nn.Module):
-#     def __init__(self, embedding_dim, user_num, skill_num):
-#         super(MF, self).__init__()
-#         self.P = nn.Embedding(num_embeddings=user_num, embedding_dim=embedding_dim)
-#         self.Q = nn.Embedding(num_embeddings=skill_num, embedding_dim=embedding_dim)
-#         self.P_bias = nn.Embedding(num_embeddings=user_num, embedding_dim=1)
-#         self.Q_bias = nn.Embedding(num_embeddings=skill_num, embedding_dim=1)
+#     """
+#     LSTM based model
+#     """
+#
+#     def __init__(self, user_num, skill_num, embedding_dim, hidden_dim, output_dim):
+#         super().__init__()
+#         self.model_name = 'MF'
+#         self.embedding_layer1 = nn.Embedding(num_embeddings=user_num, embedding_dim=embedding_dim,
+#                                              padding_idx=PAD_INDEX)
+#         self.embedding_layer2 = nn.Embedding(num_embeddings=skill_num, embedding_dim=embedding_dim,
+#                                              padding_idx=PAD_INDEX)
+#
+#         self.linear1 = nn.Linear(in_features=2 * embedding_dim, out_features=hidden_dim)
+#         self.decoder = nn.Linear(in_features=output_dim, out_features=output_dim)
 #
 #     def forward(self, user_id_sequence, skill_sequence):
-#         P = self.P(user_id_sequence)
-#         Q = self.Q(skill_sequence)
-#         P_bias = self.P_bias(user_id_sequence)
-#         Q_bias = self.Q_bias(skill_sequence)
+#         embedding_vector1 = self.embedding_layer1(user_id_sequence)
+#         embedding_vector2 = self.embedding_layer2(skill_sequence)
 #
-#         output = torch.sum(P * Q,dim=1,keepdim=True) + P_bias + Q_bias
+#         embedding_vector = torch.cat([embedding_vector1, embedding_vector2], dim=2)
 #
-#         return output
+#         hidden_vector = self.linear1(embedding_vector)
+#
+#         return hidden_vector
+
+
+
+
+class MF(nn.Module):
+    def __init__(self, embedding_dim, user_num, skill_num):
+        super(MF, self).__init__()
+        self.P = nn.Embedding(num_embeddings=user_num, embedding_dim=embedding_dim)
+        self.Q = nn.Embedding(num_embeddings=skill_num, embedding_dim=embedding_dim)
+        self.P_bias = nn.Embedding(num_embeddings=user_num, embedding_dim=1)
+        self.Q_bias = nn.Embedding(num_embeddings=skill_num, embedding_dim=1)
+
+    def forward(self, user_id_sequence, skill_sequence):
+        P = self.P(user_id_sequence)
+        Q = self.Q(skill_sequence)
+        P_bias = self.P_bias(user_id_sequence)
+        Q_bias = self.Q_bias(skill_sequence)
+
+        output = torch.sum(P * Q,dim=1,keepdim=True) + P_bias + Q_bias
+
+        return output
 
 
 
@@ -69,7 +69,7 @@ class MFDKT(nn.Module):
         self.LSTMCell = nn.LSTMCell(input_size=embedding_dim,hidden_size=hidden_dim)
         self._decoder = nn.Linear(hidden_dim, output_dim)
 
-        self.MF = MF(user_num=user_num, skill_num=skill_num,embedding_dim=skill_num, output_dim=hidden_dim)
+        self.MF = MF(user_num=user_num, skill_num=skill_num,embedding_dim=skill_num, hidden_dim=hidden_dim,output_dim=1)
         self.max_seq_len = max_seq_len
 
     def forward(self, input, target_id, user_id_sequence, skill_sequence, attempt_sequence):

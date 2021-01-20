@@ -7,9 +7,12 @@ import torch
 from network.DKT import DKT
 from network.MFDKT import MFDKT
 from network.PreMFDKT import PreMFDKT
-from solver.DKTMFSolver import DKTMFSolver
+from solver.MFDKTSolver import MFDKTSolver
 from solver.DKTSolver import DKTSolver
 from solver.PreDKTMFSolver import PreMFDKTSolver
+from matplotlib import pyplot as plt
+import scipy.stats as stats
+import pylab
 
 
 
@@ -25,7 +28,7 @@ def setup_seed(seed):
 
 def test_Baseline_DKT():
     QUESTION_MAX_NUM = 16891 + 1
-    MAX_SEQUENCE_LEN = 200
+    MAX_SEQUENCE_LEN = 100
     SKILL_NUM = 111 + 1
     EMBEDDING_DIM = 100
     HIDDEN_DIM = 100
@@ -51,7 +54,7 @@ def test_Baseline_DKT():
         optimizer=torch.optim.AdamW(DKT_model.parameters(), lr=0.001),
         max_sequence_len=MAX_SEQUENCE_LEN,
         skill_num=SKILL_NUM,
-        num_workers=1
+        num_workers=0
     )
 
     DKT_solver.train(epochs=50)
@@ -65,7 +68,7 @@ def test_MFDKT():
     MAX_USER_NUM = 4151 + 1
     QUESTION_MAX_NUM = 16891 + 1
     MAX_ATTEMPT_NUM = 5 + 1
-    MAX_SEQUENCE_LEN = 200
+    MAX_SEQUENCE_LEN = 100
     SKILL_NUM = 111 + 1
     EMBEDDING_DIM = 100
     HIDDEN_DIM = 100
@@ -83,7 +86,7 @@ def test_MFDKT():
         skill_num=SKILL_NUM
     )
 
-    MFDKT_solver = DKTMFSolver(
+    MFDKT_solver = MFDKTSolver(
         log_name='InsideLSTM/UserId+Skill/ht/SigmoidDot',
         model=MFDKT_model,
         models_checkpoints_dir='./models_checkpoints',
@@ -94,29 +97,29 @@ def test_MFDKT():
         optimizer=torch.optim.AdamW(MFDKT_model.parameters(), lr=0.001),
         max_sequence_len=MAX_SEQUENCE_LEN,
         skill_num=SKILL_NUM,
-        num_workers=1
+        num_workers=0
     )
 
     MFDKT_solver.train(epochs=50)
-
+    #
     MFDKT_solver.load_model(path='models_checkpoints/MFDKT/InsideLSTM/UserId+Skill/ht/SigmoidDot.pt')
     MFDKT_solver.test(MFDKT_solver.model, mode='val')
     MFDKT_solver.test(MFDKT_solver.model, mode='test')
 
-    # print('MFDKT_solver.model.MF.embedding_layer1:\n', MFDKT_solver.model.MF.embedding_layer1)
-    #
-    # array = MFDKT_solver.model.MF.embedding_layer1.weight.detach().numpy()
-    #
-    # print(array)
-    # np.savetxt('S-K', array, fmt='%.04f')
-    # array = np.loadtxt('S-K')
-    # print(array)
+    print('MFDKT_solver.model.MF.embedding_layer1:\n', MFDKT_solver.model.MF.embedding_layer1)
+
+    arr = MFDKT_solver.model.MF.embedding_layer1.weight.detach().numpy()
+
+    print(arr)
+    # np.savetxt('MFDKT_SK', arr, fmt='%.04f')
+    np.savetxt('MFDKT_SK', arr)
+
 
 def test_PreMFDKT():
     MAX_USER_NUM = 4151 + 1
     QUESTION_MAX_NUM = 16891 + 1
     MAX_ATTEMPT_NUM = 5 + 1
-    MAX_SEQUENCE_LEN = 200
+    MAX_SEQUENCE_LEN = 100
     SKILL_NUM = 111 + 1
     EMBEDDING_DIM = 100
     HIDDEN_DIM = 100
@@ -135,7 +138,7 @@ def test_PreMFDKT():
     )
 
     PreMFDKT_solver = PreMFDKTSolver(
-        log_name='InsideLSTM/UserId+Skill/ht/SigmoidDot',
+        log_name='InsideLSTM/UserId+Skill/ht/SigmoidDot/PreFinetune',
         model=PreMFDKT_model,
         models_checkpoints_dir='./models_checkpoints',
         tensorboard_log_dir='./tensorboard_logs',
@@ -145,30 +148,54 @@ def test_PreMFDKT():
         optimizer=torch.optim.AdamW(PreMFDKT_model.parameters(), lr=0.001),
         max_sequence_len=MAX_SEQUENCE_LEN,
         skill_num=SKILL_NUM,
-        num_workers=1
+        num_workers=0
     )
 
-    PreMFDKT_solver.pre_train(epochs=6)
+    # PreMFDKT_solver.pre_train(epochs=20)
     # PreMFDKT_solver.train(epochs=50)
 
-    PreMFDKT_solver.load_model(path='models_checkpoints/PreMFDKT/InsideLSTM/UserId+Skill/ht/SigmoidDot.pt')
+    PreMFDKT_solver.load_model(path='models_checkpoints/PreMFDKT/InsideLSTM/UserId+Skill/ht/SigmoidDot/PreFinetune.pt')
     PreMFDKT_solver.test(PreMFDKT_solver.model, mode='val')
     PreMFDKT_solver.test(PreMFDKT_solver.model, mode='test')
 
-    # print('MFDKT_solver.model.MF.embedding_layer1:\n', MFDKT_solver.model.MF.embedding_layer1)
-    #
-    # array = MFDKT_solver.model.MF.embedding_layer1.weight.detach().numpy()
-    #
-    # print(array)
-    # np.savetxt('S-K', array, fmt='%.04f')
-    # array = np.loadtxt('S-K')
-    # print(array)
+    print('PreMFDKT_solver.model.MF.embedding_layer1:\n', PreMFDKT_solver.model.MF.embedding_layer1)
+
+    arr = PreMFDKT_solver.model.MF.embedding_layer1.weight.detach().numpy()
+
+    # np.savetxt('OnlyPreMFDKT_SK', arr, fmt='%.04f')
+    np.savetxt('PreFinetuneMFDKT_SK', arr)
+
+def test_SK():
+    arrX = np.loadtxt('MFDKT_SK')
+    X = arrX[1,:]
+
+    arrY = np.loadtxt('PreOnlyMFDKT_SK')
+    Y = arrY[1,:]
+
+    print(X)
+    print(Y)
+    print()
+
+    # 绘制散点图
+
+    plt.figure(figsize=(6, 6))  # 图片像素大小
+    plt.scatter(X, Y, color="blue")  # 散点图绘制
+    plt.grid()  # 显示网格线
+    pylab.show()  # 显示图片
+
+    r, p = stats.pearsonr(X, Y)  # 相关系数和P值
+    print('相关系数r为 = %6.3f，p值为 = %6.3f' % (r, p))
 
 if __name__ == '__main__':
     setup_seed(41)
 
-    # test_Baseline_DKT()
+    test_Baseline_DKT()
 
     # test_MFDKT()
 
-    test_PreMFDKT()
+    # test_PreMFDKT()
+
+    # test_SK()
+
+
+

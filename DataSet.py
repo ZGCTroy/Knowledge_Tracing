@@ -14,140 +14,84 @@ pd.set_option('expand_frame_repr', False)
 
 
 class Assistment09(data.Dataset):
-    def __init__(self, path='data/skill_builder_data_corrected_small.csv', max_sequence_len=20):
-
+    def __init__(self, path='data/skill_builder_data_corrected_small.csv', max_seq_len=20, min_seq_len=5):
         self.path = path
-        self.max_sequence_len = max_sequence_len
+        self.max_seq_len = max_seq_len
+        self.min_seq_len = min_seq_len
 
         df = pd.read_csv(
             path,
             dtype={'skill_name': 'str'},
-            usecols=['user_id', 'problem_id', 'skill_id', 'correct', 'order_id', 'assistment_id', 'skill_name',
-                     'attempt_count'],
+            usecols=['user_id', 'seq_len', 'question_id_sequence', 'skill_id_sequence', 'correctness_sequence',
+                     'same_skill_total_num_sequence', 'same_skill_correct_num_sequence'],
         )
 
-        df = df[['user_id', 'problem_id', 'skill_id', 'correct', 'order_id', 'attempt_count', 'assistment_id',
-                 'skill_name']]
+        df = df[['user_id', 'seq_len', 'question_id_sequence', 'skill_id_sequence', 'correctness_sequence',
+                 'same_skill_total_num_sequence', 'same_skill_correct_num_sequence']]
+
         df = df.dropna().drop_duplicates()
-        df = df.sort_values(by=['user_id', 'order_id', 'problem_id'])
+        df = df[(df['seq_len'] >= min_seq_len) & (df['seq_len'] <= (max_seq_len + 1))]
+        df = df.sort_values(by=['user_id'])
         df = df.reset_index()
 
-        df = df.groupby('user_id')
-
-        self.user_list = list(df.groups.keys())
         self.df = df
-        self.min_seq_len = 30
-
-    def data_augment(self, user_id):
-        user_df = self.df.get_group(user_id)
-        if (len(user_df) < self.min_seq_len):
-            return
-
-        question_sequence = list(user_df['problem_id'])
-        skill_sequence = list(user_df['skill_id'])
-        correctness_sequence = list(user_df['correct'])
-        attempt_sequence = list(user_df['attempt_count'])
-
-        real_len = len(question_sequence) - 1
-
-        if real_len >= self.max_sequence_len:
-            query_question = question_sequence[self.max_sequence_len]
-            query_skill = skill_sequence[self.max_sequence_len]
-            query_correctness = correctness_sequence[self.max_sequence_len]
-
-            # select pre max seq len
-            question_sequence = question_sequence[:self.max_sequence_len]
-            skill_sequence = skill_sequence[:self.max_sequence_len]
-            correctness_sequence = correctness_sequence[:self.max_sequence_len]
-            attempt_sequence = attempt_sequence[:self.max_sequence_len]
-
-            # # select post max seq len
-            # question_sequence = question_sequence[-self.max_sequence_len:]
-            # skill_sequence = skill_sequence[-self.max_sequence_len:]
-            # correctness_sequence = correctness_sequence[-self.max_sequence_len:]
-        else:
-            query_question = question_sequence[real_len]
-            query_skill = skill_sequence[real_len]
-            query_correctness = correctness_sequence[real_len]
-
-            padding = (self.max_sequence_len - real_len) * [0]
-            question_sequence = padding + question_sequence[:-1]
-            skill_sequence = padding + skill_sequence[:-1]
-            correctness_sequence = padding + correctness_sequence[:-1]
-            attempt_sequence = padding + attempt_sequence[:-1]
-
-    # def get_processed_data_list(self):
-    #     for user_id in self.user_list:
-    #         user_df = self.data_augment(user_id)
-    #     self.final_df = self.final_df + user_df
 
     def __len__(self):
-        return len(self.user_list)
+        return len(self.df)
+
+    def strList_to_list(self, strList):
+        l = strList.strip('[],')
+        l = l.split(',')
+        l = [int(i) for i in l]
+        return l
 
     def __getitem__(self, index):
-        user_id = self.user_list[index]
-        user_df = self.df.get_group(user_id)
+        data = self.df.iloc[index]
+        user_id = data['user_id']
+        real_len = data['seq_len'] - 1
 
-        question_sequence = list(user_df['problem_id'])
-        skill_sequence = list(user_df['skill_id'])
-        correctness_sequence = list(user_df['correct'])
-        attempt_sequence = list(user_df['attempt_count'])
-        correctness_ratio_sequence = list(user_df['same_skill_correctness_ratio'])
+        question_id_sequence = self.strList_to_list(data['question_id_sequence'])
+        skill_id_sequence = self.strList_to_list(data['skill_id_sequence'])
+        correctness_sequence = self.strList_to_list(data['correctness_sequence'])
+        same_skill_total_num_sequence = self.strList_to_list(data['same_skill_total_num_sequence'])
+        same_skill_correct_num_sequence = self.strList_to_list(data['same_skill_correct_num_sequence'])
+        same_skill_correctness_ratio_sequence = [float(a)/float(b) for a,b in zip(same_skill_correct_num_sequence,same_skill_total_num_sequence)]
 
-        real_len = len(question_sequence) - 1
 
-        if real_len >= self.max_sequence_len:
-            query_question = question_sequence[self.max_sequence_len]
-            query_skill = skill_sequence[self.max_sequence_len]
-            query_correctness = correctness_sequence[self.max_sequence_len]
-
-            # select pre max seq len
-            question_sequence = question_sequence[:self.max_sequence_len]
-            skill_sequence = skill_sequence[:self.max_sequence_len]
-            correctness_sequence = correctness_sequence[:self.max_sequence_len]
-            attempt_sequence = attempt_sequence[:self.max_sequence_len]
-            correctness_ratio_sequence =  correctness_ratio_sequence[:self.max_sequence_len]
-
-            # # select post max seq len
-            # question_sequence = question_sequence[-self.max_sequence_len:]
-            # skill_sequence = skill_sequence[-self.max_sequence_len:]
-            # correctness_sequence = correctness_sequence[-self.max_sequence_len:]
-            # correctness_ratio_sequence = correctness_ratio_sequence[self.max_sequence_len:]
-        else:
-            query_question = question_sequence[real_len]
-            query_skill = skill_sequence[real_len]
-            query_correctness = correctness_sequence[real_len]
-
-            padding = (self.max_sequence_len - real_len) * [0]
-            question_sequence = padding + question_sequence[:-1]
-            skill_sequence = padding + skill_sequence[:-1]
-            correctness_sequence = padding + correctness_sequence[:-1]
-            attempt_sequence = padding + attempt_sequence[:-1]
-            correctness_ratio_sequence = padding + correctness_ratio_sequence[:-1]
+        query_question_id = question_id_sequence[-1]
+        query_skill_id = skill_id_sequence[-1]
+        query_correctness = correctness_sequence[-1]
+        padding = (self.max_seq_len - real_len) * [0]
+        float_padding = (self.max_seq_len - real_len) * [0.]
+        question_id_sequence = padding + question_id_sequence[:-1]
+        skill_id_sequence = padding + skill_id_sequence[:-1]
+        correctness_sequence = padding + correctness_sequence[:-1]
+        same_skill_correctness_ratio_sequence = float_padding + same_skill_correctness_ratio_sequence[:-1]
 
         return {
             'user_id': torch.LongTensor([user_id]),
             'real_len': torch.LongTensor([real_len]),
-            'question_sequence': torch.LongTensor(question_sequence),
-            'skill_sequence': torch.LongTensor(skill_sequence),
+            'question_id_sequence': torch.LongTensor(question_id_sequence),
+            'skill_id_sequence': torch.LongTensor(skill_id_sequence),
             'correctness_sequence': torch.LongTensor(correctness_sequence),
-            'attempt_sequence': torch.FloatTensor(attempt_sequence),
-            'correctness_ratio_sequence': torch.FloatTensor(correctness_ratio_sequence),
-            'query_question': torch.LongTensor([query_question]),
-            'query_skill': torch.LongTensor([int(query_skill)]),
+            'same_skill_correctness_ratio_sequence': torch.FloatTensor(same_skill_correctness_ratio_sequence),
+            'query_question_id': torch.LongTensor([query_question_id]),
+            'query_skill_id': torch.LongTensor([query_skill_id]),
             'query_correctness': torch.FloatTensor([query_correctness])
         }
 
+dataset = Assistment09(path='data/skill_builder_data_corrected_preprocessed_train.csv')
+for i in range(10):
+    dataset.__getitem__(i)
 
-# dataset = Assistment09()
-#
+
 # df = pd.read_csv(
 #     'data/skill_builder_data_corrected_big.csv',
 #     dtype={'skill_name': 'str'},
 #     usecols=['user_id', 'assistment_id', 'problem_id', 'skill_id', 'correct', 'order_id', 'assistment_id',
 #              'skill_name'],
 # )
-#
-# # print(df['user_id'].drop_duplicates().count())
-#
+
+# print(df['user_id'].drop_duplicates().count())
+
 # print(df['correct'].value_counts())
