@@ -17,6 +17,7 @@ class DKT(nn.Module):
         self.encoder = nn.Embedding(num_embeddings=vocab_size, embedding_dim=embedding_dim, padding_idx=PAD_INDEX)
         self.lstm = nn.LSTM(embedding_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=dropout)
         self.decoder = nn.Linear(hidden_dim, output_dim)
+        self.dropLayer= nn.Dropout(dropout)
 
     def forward(self, input, target_id):
         """
@@ -26,6 +27,7 @@ class DKT(nn.Module):
         return output, a tensor of shape (batch_size, 1), representing the probability of correctly answering the qt
         """
         embedded_input = self.encoder(input)
+        embedded_input = self.dropLayer(embedded_input)
 
         output, _ = self.lstm(embedded_input)
 

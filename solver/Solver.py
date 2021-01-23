@@ -12,7 +12,7 @@ from DataSet import Assistment09
 
 class Solver():
     def __init__(self, model, optimizer, log_name, models_checkpoints_dir, tensorboard_log_dir, data_path='',
-                 max_sequence_len=200, cuda='cuda:0', batch_size=32, num_workers=2):
+                 max_sequence_len=200, cuda='cpu', batch_size=32, num_workers=2):
         self.model = model
         self.best_model = model
         self.max_sequence_len = max_sequence_len
@@ -44,8 +44,6 @@ class Solver():
         self.local_time = str(time.asctime(time.localtime(time.time())))
         self.log_dir = self.tensorboard_log_dir + '/' + self.model.model_name + '/' + self.log_name
 
-
-
     def load_data(self, path):
 
         # dataset = Assistment09(path=path, max_sequence_len=self.max_sequence_len)
@@ -68,15 +66,15 @@ class Solver():
         #     generator=torch.Generator().manual_seed(41)
         # )
 
-        train_dataset = Assistment09(path=path+'_train.csv', max_seq_len=self.max_sequence_len)
-        val_dataset = Assistment09(path=path+'_val.csv', max_seq_len=self.max_sequence_len)
-        test_dataset = Assistment09(path=path+'_test.csv', max_seq_len=self.max_sequence_len)
+        train_dataset = Assistment09(path=path + '_train.csv', max_seq_len=self.max_sequence_len)
+        val_dataset = Assistment09(path=path + '_val.csv', max_seq_len=self.max_sequence_len)
+        test_dataset = Assistment09(path=path + '_test.csv', max_seq_len=self.max_sequence_len)
 
         self.data_loader['train'] = torch.utils.data.DataLoader(
             train_dataset,
             batch_size=self.batch_size,
             shuffle=True,
-            num_workers = self.num_workers
+            num_workers=self.num_workers
         )
 
         self.data_loader['val'] = torch.utils.data.DataLoader(
@@ -99,13 +97,18 @@ class Solver():
     def train(self, epochs):
 
         self.writer = SummaryWriter(log_dir=self.log_dir)
+        for i, (name, param) in enumerate(self.model.named_parameters()):
+            if 'bn' not in name:
+                self.writer.add_histogram(name, param, 0)
 
         with torch.no_grad():
             best_val_loss, best_val_auc, best_val_acc = self.run_one_epoch(self.model, mode='val')
+            best_test_loss, best_test_auc, best_test_acc = self.run_one_epoch(self.model, mode='test')
 
         print('=' * 89)
+        print('Initial Val Loss: {:.4f} | AUC: {:.4f} | ACC: {:.4f}\n'.format(best_val_loss, best_val_auc, best_val_acc))
         print(
-            'Initial Val Loss: {:.4f} | AUC: {:.4f} | ACC: {:.4f}\n'.format(best_val_loss, best_val_auc, best_val_acc))
+            'Initial Test Loss: {:.4f} | AUC: {:.4f} | ACC: {:.4f}\n'.format(best_test_loss, best_test_auc, best_test_acc))
         print('=' * 89)
 
         print('start training')
@@ -131,19 +134,18 @@ class Solver():
                                                                               val_acc))
             print('| end of epoch {:3d} | time: {:5.2f}s | test loss {:5.2f} | '
                   'test ppl {:8.2f} | test AUC {:.5f} | test ACC{:.5f}'.format(epoch, (time.time() - epoch_start_time),
-                                                                              test_loss, math.exp(test_loss), test_auc,
-                                                                              test_acc))
+                                                                               test_loss, math.exp(test_loss), test_auc,
+                                                                               test_acc))
             print('-' * 89)
 
-            # self.writer.add_scalars('ACC/train_val', {'train acc': train_acc, 'val acc': val_acc}, epoch)
             self.writer.add_scalar('ACC/train', train_acc, epoch)
             self.writer.add_scalar('ACC/val', val_acc, epoch)
             self.writer.add_scalar('ACC/test', test_acc, epoch)
-            # self.writer.add_scalars('AUC/train_val', {'train auc': train_auc, 'val auc': val_auc}, epoch)
+
             self.writer.add_scalar('AUC/train', train_auc, epoch)
             self.writer.add_scalar('AUC/val', val_auc, epoch)
             self.writer.add_scalar('AUC/test', test_auc, epoch)
-            # self.writer.add_scalars('LOSS/train_val', {'train loss': train_loss, 'val loss': val_loss}, epoch)
+
             self.writer.add_scalar('LOSS/train', train_loss, epoch)
             self.writer.add_scalar('LOSS/val', val_loss, epoch)
             self.writer.add_scalar('LOSS/test', test_loss, epoch)
@@ -155,8 +157,8 @@ class Solver():
                 best_val_loss = val_loss
                 best_val_auc = val_auc
                 best_val_acc = val_acc
-                self.best_model = self.model
-                self.save_model(path=self.models_checkpoints_dir  + '/' + self.log_name + '.pt')
+                self.best_model =  self.model
+                self.save_model(path=self.models_checkpoints_dir + '/' + self.log_name + '.pt')
 
         # self.scheduler.step()
         self.writer.close()
@@ -165,7 +167,7 @@ class Solver():
         test_loss, auc, acc = self.run_one_epoch(model, mode=mode)
         print('=' * 89)
         print('{}| {} | loss {:5.2f} | ppl {:8.2f} | auc {:5.2f} | acc {:5.2f}'.format(
-            model.model_name,mode, test_loss, math.exp(test_loss), auc, acc))
+            model.model_name, mode, test_loss, math.exp(test_loss), auc, acc))
         print('=' * 89)
 
     def save_model(self, path):

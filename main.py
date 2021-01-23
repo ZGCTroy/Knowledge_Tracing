@@ -15,7 +15,6 @@ import scipy.stats as stats
 import pylab
 
 
-
 def setup_seed(seed):
     np.random.seed(seed)
     random.seed(seed)
@@ -59,9 +58,9 @@ def test_Baseline_DKT():
 
     DKT_solver.train(epochs=50)
 
-    DKT_solver.load_model(path='models_checkpoints/DKT/SkillLevel/Baseline.pt')
-    DKT_solver.test(DKT_solver.model, mode='val')
-    DKT_solver.test(DKT_solver.model, mode='test')
+    # DKT_solver.load_model(path='models_checkpoints/DKT/SkillLevel/Baseline.pt')
+    # DKT_solver.test(DKT_solver.model, mode='val')
+    # DKT_solver.test(DKT_solver.model, mode='test')
 
 
 def test_MFDKT():
@@ -87,7 +86,7 @@ def test_MFDKT():
     )
 
     MFDKT_solver = MFDKTSolver(
-        log_name='InsideLSTM/UserId+Skill/ht/SigmoidDot',
+        log_name='SkillLevel/ct/UserId+SkillId/AddDot',
         model=MFDKT_model,
         models_checkpoints_dir='./models_checkpoints',
         tensorboard_log_dir='./tensorboard_logs',
@@ -101,18 +100,19 @@ def test_MFDKT():
     )
 
     MFDKT_solver.train(epochs=50)
+
     #
-    MFDKT_solver.load_model(path='models_checkpoints/MFDKT/InsideLSTM/UserId+Skill/ht/SigmoidDot.pt')
-    MFDKT_solver.test(MFDKT_solver.model, mode='val')
-    MFDKT_solver.test(MFDKT_solver.model, mode='test')
-
-    print('MFDKT_solver.model.MF.embedding_layer1:\n', MFDKT_solver.model.MF.embedding_layer1)
-
-    arr = MFDKT_solver.model.MF.embedding_layer1.weight.detach().numpy()
-
-    print(arr)
-    # np.savetxt('MFDKT_SK', arr, fmt='%.04f')
-    np.savetxt('MFDKT_SK', arr)
+    # MFDKT_solver.load_model(path='models_checkpoints/MFDKT/InsideLSTM/UserId+Skill/ct/Dot.pt')
+    # MFDKT_solver.test(MFDKT_solver.model, mode='val')
+    # MFDKT_solver.test(MFDKT_solver.model, mode='test')
+    #
+    # print('MFDKT_solver.model.MF.embedding_layer1:\n', MFDKT_solver.model.MF.embedding_layer1)
+    #
+    # arr = MFDKT_solver.model.MF.embedding_layer1.weight.detach().numpy()
+    #
+    # print(arr)
+    # # np.savetxt('MFDKT_SK', arr, fmt='%.04f')
+    # np.savetxt('MFDKT_SK', arr)
 
 
 def test_PreMFDKT():
@@ -138,7 +138,7 @@ def test_PreMFDKT():
     )
 
     PreMFDKT_solver = PreMFDKTSolver(
-        log_name='InsideLSTM/UserId+Skill/ht/SigmoidDot/PreFinetune',
+        log_name='SkillLevel/ht/UserId+SkillId/AddDot/PreFinetune',
         model=PreMFDKT_model,
         models_checkpoints_dir='./models_checkpoints',
         tensorboard_log_dir='./tensorboard_logs',
@@ -151,26 +151,29 @@ def test_PreMFDKT():
         num_workers=0
     )
 
+    PreMFDKT_solver.load_model(path='models_checkpoints/PreMFDKT/SkillLevel/xt/UserId+SkillId/AddDot/OnlyPre.pt')
     # PreMFDKT_solver.pre_train(epochs=20)
-    # PreMFDKT_solver.train(epochs=50)
+    PreMFDKT_solver.train(epochs=50)
 
-    PreMFDKT_solver.load_model(path='models_checkpoints/PreMFDKT/InsideLSTM/UserId+Skill/ht/SigmoidDot/PreFinetune.pt')
-    PreMFDKT_solver.test(PreMFDKT_solver.model, mode='val')
-    PreMFDKT_solver.test(PreMFDKT_solver.model, mode='test')
+    # PreMFDKT_solver.test(PreMFDKT_solver.model, mode='val')
+    # PreMFDKT_solver.test(PreMFDKT_solver.model, mode='test')
+    #
+    # P = PreMFDKT_solver.model.MF.P
+    # Q = PreMFDKT_solver.model.MF.Q
+    # P_bias = PreMFDKT_solver.model.MF.P_bias
+    # Q_bias = PreMFDKT_solver.model.MF.Q_bias
+    # SK_matrix = torch.sum(P * Q, dim=1, keepdim=True) + P_bias + Q_bias
+    # SK_matrix = SK_matrix.detach().numpy()
+    # np.savetxt('OnlyPreMFDKT_SK', SK_matrix, fmt='%.05f')
+    # np.savetxt('PreFinetuneMFDKT_SK', arr)
 
-    print('PreMFDKT_solver.model.MF.embedding_layer1:\n', PreMFDKT_solver.model.MF.embedding_layer1)
-
-    arr = PreMFDKT_solver.model.MF.embedding_layer1.weight.detach().numpy()
-
-    # np.savetxt('OnlyPreMFDKT_SK', arr, fmt='%.04f')
-    np.savetxt('PreFinetuneMFDKT_SK', arr)
 
 def test_SK():
     arrX = np.loadtxt('MFDKT_SK')
-    X = arrX[1,:]
+    X = arrX[1, :]
 
     arrY = np.loadtxt('PreOnlyMFDKT_SK')
-    Y = arrY[1,:]
+    Y = arrY[1, :]
 
     print(X)
     print(Y)
@@ -186,16 +189,20 @@ def test_SK():
     r, p = stats.pearsonr(X, Y)  # 相关系数和P值
     print('相关系数r为 = %6.3f，p值为 = %6.3f' % (r, p))
 
+
 if __name__ == '__main__':
+    # TODO 1: fix the random seed for reproduction
     setup_seed(41)
 
-    test_Baseline_DKT()
+    # # TODO 2: Preprocess the data
+    # from PreProcess import run
+    # run()
+
+    # TODO 3: test
+    # test_Baseline_DKT()
 
     # test_MFDKT()
 
-    # test_PreMFDKT()
+    test_PreMFDKT()
 
     # test_SK()
-
-
-

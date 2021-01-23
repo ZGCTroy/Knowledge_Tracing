@@ -26,15 +26,9 @@ class DKTSolver(Solver):
             num_workers=num_workers,
         )
         self.skill_num = skill_num
-        # self.writer.add_graph(
-        #     self.model,
-        #     input_to_model=[
-        #         torch.ones(size=(64, 200)).long(),
-        #         torch.ones(size=(64, 1)).long(),
-        #     ]
-        # )
 
     def run_one_epoch(self, model, cur_epoch=1, mode=''):
+        model = model.to(self.device)
         if mode == 'train':
             model.train()
         else:
@@ -44,46 +38,35 @@ class DKTSolver(Solver):
         start_time = time.time()
         batch_id = 0
         log_interval = 200
-        total_predictions = []
-        total_query_correctness = []
-        total_correct_probability = []
+        total_prediction = []
+        total_label = []
+        total_output = []
 
         for data in self.data_loader[mode]:
-
             self.optimizer.zero_grad()
 
-            skill_id_sequence = data['skill_id_sequence']
-            question_id_sequence = data['question_id_sequence']
-            correctness_sequence = data['correctness_sequence']
-            query_skill_id = data['query_skill_id']
-            query_question_id = data['query_question_id']
-            query_correctness = data['query_correctness']
-            user_id = data['user_id']
-            user_id_sequence = torch.repeat_interleave(user_id.view(-1, 1), repeats=self.max_sequence_len, dim=1)
+            # SkillLevel Input
+            input = torch.where(data['correctness_sequence'] == 1, data['skill_id_sequence'] + self.skill_num,
+                                data['skill_id_sequence'])
+            label = data['query_correctness']
+            query = data['query_skill_id']
+            cur_batch_size = label.size()[0]
 
-            # SkillLevel
-            input = skill_id_sequence
-            query = query_skill_id
-
-            # QuestionLevel
-            # input = question_sequence
-            # query = query_question
-
-            input = torch.where(correctness_sequence == 1, input + self.skill_num, input)
-
-            correctness_probability = self.model(input, query)
+            output = self.model(
+                input = input.to(self.device),
+                target_id = query.to(self.device)
+            ).cpu()
 
             loss = torch.nn.BCELoss()(
-                correctness_probability,
-                query_correctness
+                output,
+                label
             )
-            total_loss += loss.item() * query_correctness.size()[0]
+            total_loss += loss.item() * cur_batch_size
 
-            query_correctness = data['query_correctness']
-            predictions = torch.where(correctness_probability > 0.5, 1, 0)
-            total_predictions.extend(predictions.squeeze(-1).data.cpu().numpy())
-            total_query_correctness.extend(query_correctness.squeeze(-1).data.cpu().numpy())
-            total_correct_probability.extend(correctness_probability.squeeze(-1).data.cpu().numpy())
+            prediction = torch.where(output > 0.5, 1., 0.)
+            total_prediction.extend(prediction.squeeze(-1).detach().numpy())
+            total_label.extend(label.squeeze(-1).detach().numpy())
+            total_output.extend(output.squeeze(-1).detach().numpy())
 
             # 防止梯度爆炸的梯度截断，梯度超过5就截断
             if mode == 'train':
@@ -105,7 +88,7 @@ class DKTSolver(Solver):
 
             batch_id += 1
 
-        auc = sklearn.metrics.roc_auc_score(total_query_correctness, total_correct_probability)
-        acc = sklearn.metrics.accuracy_score(total_query_correctness, total_predictions)
+        auc = sklearn.metrics.roc_auc_score(total_label, total_output)
+        acc = sklearn.metrics.accuracy_score(total_label, total_prediction)
 
         return total_loss / (len(self.data_loader[mode].dataset) - 1), auc, acc
