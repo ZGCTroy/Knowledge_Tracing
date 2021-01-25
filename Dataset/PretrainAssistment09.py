@@ -13,7 +13,7 @@ pd.set_option('max_colwidth', 1000)
 pd.set_option('expand_frame_repr', False)
 
 
-class Assistment09(data.Dataset):
+class PretrainAssistment09(data.Dataset):
     def __init__(self, path='data/skill_builder_data_corrected_small.csv', max_seq_len=20, min_seq_len=5):
         self.path = path
         self.max_seq_len = max_seq_len
@@ -80,9 +80,14 @@ class Assistment09(data.Dataset):
             'query_correctness': torch.FloatTensor([query_correctness])
         }
 
-dataset = Assistment09(path='data/skill_builder_data_corrected_preprocessed_train.csv')
-for i in range(10):
-    dataset.__getitem__(i)
+
+# dataset = Assistment09(path='data/skill_builder_data_corrected_preprocessed_train.csv')
+# for i in range(1000,1010):
+#     data = dataset.__getitem__(i)
+#     print(data['user_id'])
+#     print(data['skill_id_sequence'])
+#     print(data['same_skill_correctness_ratio_sequence'])
+#     print()
 
 
 # df = pd.read_csv(
