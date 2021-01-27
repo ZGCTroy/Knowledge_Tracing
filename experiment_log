@@ -1,0 +1,60 @@
+x : main input to the LSTMCell
+xt: main input at timestamp t
+ct: cell state of LSTMCell at timestamp t
+ht: hidden state of LSTMCell at timestamp t
+L : max sequence len
+T : last timestap, usually equal to the max sequence len L
+hT: hiddent state of LSTMCell at last timestamp T
+
+e : extended input from MF
+et: extended input at timestamp t
+eT: extended input at final timestamp T
+
+Experiment 1: Comparison on the approach of combining the main network with MF network
+    1. directly Add et with ht, ct, or xt
+        For example, during LSTMCell
+            1.1 ht = ht + et
+            1.2 ct = ct + et
+            1.3 xt = xt + et
+
+    2. directly AddDot et with ht, ct, or xt
+
+        For example, during LSTMCell
+            2.1 ht = ht + ht * et
+            2.2 ct = ct + ct * et
+            2.3 xt = xt + xt * et
+
+    3. directly AddDot eT with hT
+        For example, after LSTMCell
+            3.1 ht = ht + ht * et
+
+    4. use a linear layer to combine eT with hT
+        For example, after LSTMCell
+            model.decoder = nn.Linear(hidden_dim + 1, output_dim)
+            ht = torch.cat([ht,et],dim=1)
+            output = model.decoder(ht)
+
+    * Conclusion 1: approach 2 performs a little better than approach 1, very slightly, and may can be ignored
+    * Conclusion 2: approach 3 performs nearly the same as approach 2, very slightly, and may can be ignored
+    * Conclusion 3: approach 4 performs much better than approach 1,2,3 about 1%, and deserve further research.
+    * Conclusion 4: the improvement of approach 4 may be the result of linear layer
+
+Experiment 2: Comparison on the Regularization
+    In our experiment, we use the AdamW as optimizer, which is a improved version of Adam by correctly accomplish the weight decay in Adam.
+    In Adam, the weight decay is equal to using L2 regularization on weight and bias. However, the weight decay in Adam works incorrectly.
+    Thus, AdamW accomplishs the weight decay function in Adam.
+
+    By using the weight decay of AdamW, we can add L2 regularization loss to prevent OverFit.
+
+    The default weight decay of AdamW is set to 0.01.
+
+    1. weight decay = 0.01
+    2. weight decay = 0.05
+    3. weight decay = 0.1
+    4. weight decay = 1.0
+
+    * Conclusion 1: the change of weight decay leads to obvious change in results, therefore the weight decay deserves further research
+
+    ing
+
+Experiment 3: MF

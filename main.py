@@ -3,16 +3,12 @@ import random
 
 import numpy as np
 import torch
+from torch.utils.tensorboard import SummaryWriter
 
 from network.DKT import DKT
 from network.MFDKT import MFDKT
-from network.PreMFDKT import PreMFDKT
-from solver.MFDKTSolver import MFDKTSolver
 from solver.DKTSolver import DKTSolver
-from solver.PreDKTMFSolver import PreMFDKTSolver
-from matplotlib import pyplot as plt
-import scipy.stats as stats
-import pylab
+from solver.MFDKTSolver import MFDKTSolver
 
 
 def setup_seed(seed):
@@ -25,170 +21,193 @@ def setup_seed(seed):
     os.environ['PYTHONHASHSEED'] = str(seed)
 
 
-def test_Baseline_DKT():
-    QUESTION_MAX_NUM = 16891 + 1
-    MAX_SEQUENCE_LEN = 100
-    SKILL_NUM = 111 + 1
-    EMBEDDING_DIM = 100
-    HIDDEN_DIM = 100
-    BATCH_SIZE = 64
-
-    DKT_model = DKT(
-        vocab_size=2 * SKILL_NUM + 1,
+def test_Baseline_DKT(log_name):
+    model = DKT(
+        skill_num=SKILL_NUM,
         embedding_dim=EMBEDDING_DIM,
         hidden_dim=HIDDEN_DIM,
         num_layers=1,
-        output_dim=SKILL_NUM,
-        dropout=0.2
+        output_dim=SKILL_NUM + 1,
+        dropout=DROP_OUT,
     )
 
-    DKT_solver = DKTSolver(
-        log_name='SkillLevel/Baseline',
-        model=DKT_model,
-        models_checkpoints_dir='./models_checkpoints',
-        tensorboard_log_dir='./tensorboard_logs',
-        data_path='data/skill_builder_data_corrected_preprocessed',
-        cuda='cuda:0',
+    solver = DKTSolver(
+        model=model,
+        models_checkpoints_dir=MODELS_CHECKPOINTS_DIR,
+        tensorboard_log_dir=TENSORBOARD_LOG_DIR,
+        cuda=CUDA,
         batch_size=BATCH_SIZE,
-        optimizer=torch.optim.AdamW(DKT_model.parameters(), lr=0.001),
         max_sequence_len=MAX_SEQUENCE_LEN,
         skill_num=SKILL_NUM,
-        num_workers=0
     )
 
-    DKT_solver.train(epochs=50)
+    # TODO 4 : Train
+    solver.load_data(
+        path='data/skill_builder_data_corrected_preprocessed',
+        dataset_type='Assistment09'
+    )
 
-    # DKT_solver.load_model(path='models_checkpoints/DKT/SkillLevel/Baseline.pt')
-    # DKT_solver.test(DKT_solver.model, mode='val')
-    # DKT_solver.test(DKT_solver.model, mode='test')
+    optimizer = ''
+    if OPTIMIZER_TYPE == 'AdamW':
+        optimizer = torch.optim.AdamW(solver.model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
+    if OPTIMIZER_TYPE == 'SGD':
+        torch.optim.SGD(solver.model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
+
+    solver.train(
+        model=solver.model,
+        log_name=log_name,
+        epochs=EPOCHS,
+        optimizer=optimizer,
+        freezeMF=FREEZE_MF,
+        patience=PATIENCE
+    )
+
+    # TODO 5: Test
+    with torch.no_grad():
+        best_val_loss, best_val_auc, best_val_acc = solver.evaluate(solver.best_model, mode='val')
+        best_test_loss, best_test_auc, best_test_acc = solver.evaluate(solver.best_model, mode='test')
+
+        writer = SummaryWriter(log_dir='./tensorboard_logs/hparam_log/DKT')
+        writer.add_hparams(
+            hparam_dict={
+                'model/name': 'DKT',
+                'model/dropout': DROP_OUT,
+                'optimizer/type': OPTIMIZER_TYPE,
+                'optimizer/start lr': LR,
+                'optimizer/weight decay': WEIGHT_DECAY,
+                'schedular/step size': 1,
+                'schedular/gamma': 0.95,
+                'batch size': BATCH_SIZE,
+            },
+            metric_dict={
+                'test auc': best_test_auc,
+                'test acc': best_test_acc,
+                'test loss': best_test_loss
+            }
+        )
 
 
-def test_MFDKT():
-    MAX_USER_NUM = 4151 + 1
-    QUESTION_MAX_NUM = 16891 + 1
-    MAX_ATTEMPT_NUM = 5 + 1
-    MAX_SEQUENCE_LEN = 100
-    SKILL_NUM = 111 + 1
-    EMBEDDING_DIM = 100
-    HIDDEN_DIM = 100
-    BATCH_SIZE = 64
-
-    MFDKT_model = MFDKT(
-        vocab_size=2 * SKILL_NUM + 1,
-        embedding_dim=EMBEDDING_DIM,
-        hidden_dim=HIDDEN_DIM,
-        num_layers=1,
-        output_dim=SKILL_NUM,
-        dropout=0.2,
+def test_MFDKT(log_name):
+    # TODO 1: Set the model
+    model = MFDKT(
         user_num=MAX_USER_NUM,
-        max_seq_len=MAX_SEQUENCE_LEN,
-        skill_num=SKILL_NUM
-    )
-
-    MFDKT_solver = MFDKTSolver(
-        log_name='SkillLevel/ct/UserId+SkillId/AddDot',
-        model=MFDKT_model,
-        models_checkpoints_dir='./models_checkpoints',
-        tensorboard_log_dir='./tensorboard_logs',
-        data_path='data/skill_builder_data_corrected_preprocessed',
-        cuda='cuda:0',
-        batch_size=BATCH_SIZE,
-        optimizer=torch.optim.AdamW(MFDKT_model.parameters(), lr=0.001),
-        max_sequence_len=MAX_SEQUENCE_LEN,
         skill_num=SKILL_NUM,
-        num_workers=0
-    )
-
-    MFDKT_solver.train(epochs=50)
-
-    #
-    # MFDKT_solver.load_model(path='models_checkpoints/MFDKT/InsideLSTM/UserId+Skill/ct/Dot.pt')
-    # MFDKT_solver.test(MFDKT_solver.model, mode='val')
-    # MFDKT_solver.test(MFDKT_solver.model, mode='test')
-    #
-    # print('MFDKT_solver.model.MF.embedding_layer1:\n', MFDKT_solver.model.MF.embedding_layer1)
-    #
-    # arr = MFDKT_solver.model.MF.embedding_layer1.weight.detach().numpy()
-    #
-    # print(arr)
-    # # np.savetxt('MFDKT_SK', arr, fmt='%.04f')
-    # np.savetxt('MFDKT_SK', arr)
-
-
-def test_PreMFDKT():
-    MAX_USER_NUM = 4151 + 1
-    QUESTION_MAX_NUM = 16891 + 1
-    MAX_ATTEMPT_NUM = 5 + 1
-    MAX_SEQUENCE_LEN = 100
-    SKILL_NUM = 111 + 1
-    EMBEDDING_DIM = 100
-    HIDDEN_DIM = 100
-    BATCH_SIZE = 64
-
-    PreMFDKT_model = PreMFDKT(
-        vocab_size=2 * SKILL_NUM + 1,
         embedding_dim=EMBEDDING_DIM,
         hidden_dim=HIDDEN_DIM,
         num_layers=1,
-        output_dim=SKILL_NUM,
-        dropout=0.2,
-        user_num=MAX_USER_NUM,
-        max_seq_len=MAX_SEQUENCE_LEN,
-        skill_num=SKILL_NUM
+        output_dim=SKILL_NUM + 1,
+        dropout=DROP_OUT,
+        max_seq_len=MAX_SEQUENCE_LEN
     )
 
-    PreMFDKT_solver = PreMFDKTSolver(
-        log_name='SkillLevel/ht/UserId+SkillId/AddDot/PreFinetune',
-        model=PreMFDKT_model,
-        models_checkpoints_dir='./models_checkpoints',
-        tensorboard_log_dir='./tensorboard_logs',
-        data_path='data/skill_builder_data_corrected_preprocessed',
-        cuda='cuda:0',
+    solver = MFDKTSolver(
+        model=model,
+        models_checkpoints_dir=MODELS_CHECKPOINTS_DIR,
+        tensorboard_log_dir=TENSORBOARD_LOG_DIR,
+        cuda=CUDA,
         batch_size=BATCH_SIZE,
-        optimizer=torch.optim.AdamW(PreMFDKT_model.parameters(), lr=0.001),
         max_sequence_len=MAX_SEQUENCE_LEN,
         skill_num=SKILL_NUM,
-        num_workers=0
     )
 
-    PreMFDKT_solver.load_model(path='models_checkpoints/PreMFDKT/SkillLevel/xt/UserId+SkillId/AddDot/OnlyPre.pt')
-    # PreMFDKT_solver.pre_train(epochs=20)
-    PreMFDKT_solver.train(epochs=50)
+    # TODO 3 : Pretrain
+    if PRETRAIN_MF:
+        solver.load_data(
+            path='data/skill_builder_data_corrected_preprocessed_pretrain',
+            dataset_type='PretrainAssistment09'
+        )
 
-    # PreMFDKT_solver.test(PreMFDKT_solver.model, mode='val')
-    # PreMFDKT_solver.test(PreMFDKT_solver.model, mode='test')
-    #
-    # P = PreMFDKT_solver.model.MF.P
-    # Q = PreMFDKT_solver.model.MF.Q
-    # P_bias = PreMFDKT_solver.model.MF.P_bias
-    # Q_bias = PreMFDKT_solver.model.MF.Q_bias
-    # SK_matrix = torch.sum(P * Q, dim=1, keepdim=True) + P_bias + Q_bias
-    # SK_matrix = SK_matrix.detach().numpy()
-    # np.savetxt('OnlyPreMFDKT_SK', SK_matrix, fmt='%.05f')
-    # np.savetxt('PreFinetuneMFDKT_SK', arr)
+        solver.pre_train(
+            model=solver.model.MF,
+            log_name='MFDKT/SkillLevel/UserId+SkillId/MF',
+            epochs=100,
+            optimizer=torch.optim.AdamW(solver.model.parameters(), lr=0.01, weight_decay=0.5),
+        )
 
+    # TODO 4 : Train
+    if USE_PRETRAINED_MF:
+        solver.load_model(
+            solver.model.MF,
+            path='models_checkpoints/MFDKT/SkillLevel/UserId+SkillId/MF.pt'
+        )
 
-def test_SK():
-    arrX = np.loadtxt('MFDKT_SK')
-    X = arrX[1, :]
+    solver.load_data(
+        path='data/skill_builder_data_corrected_preprocessed',
+        dataset_type='Assistment09'
+    )
 
-    arrY = np.loadtxt('PreOnlyMFDKT_SK')
-    Y = arrY[1, :]
+    optimizer = ''
+    if OPTIMIZER_TYPE == 'AdamW':
+        optimizer = torch.optim.AdamW(solver.model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
+    if OPTIMIZER_TYPE == 'SGD':
+        optimizer = torch.optim.SGD(solver.model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY, momentum=MOMENTUM)
 
-    print(X)
-    print(Y)
-    print()
+    solver.train(
+        model=solver.model,
+        log_name=log_name,
+        epochs=EPOCHS,
+        optimizer=optimizer,
+        freezeMF=FREEZE_MF,
+        patience=PATIENCE
+    )
 
-    # 绘制散点图
+    # TODO 5: Test and Save Results
+    with torch.no_grad():
+        best_val_loss, best_val_auc, best_val_acc = solver.evaluate(solver.best_model, mode='val')
+        best_test_loss, best_test_auc, best_test_acc = solver.evaluate(solver.best_model, mode='test')
 
-    plt.figure(figsize=(6, 6))  # 图片像素大小
-    plt.scatter(X, Y, color="blue")  # 散点图绘制
-    plt.grid()  # 显示网格线
-    pylab.show()  # 显示图片
+        writer = SummaryWriter(log_dir='./tensorboard_logs/hparam_log/MFDKT')
+        writer.add_hparams(
+            hparam_dict={
+                'model/name': model.model_name,
+                'model/freeze MF': FREEZE_MF,
+                'model/pretrain MF': USE_PRETRAINED_MF,
+                'model/the approach of combining MF': 'linear layer',
+                'model/extended input': 'skill states',
+                'model/combine with': 'output',
+                'model/dropout': DROP_OUT,
+                'optimizer/type': OPTIMIZER_TYPE,
+                'optimizer/start lr': LR,
+                'optimizer/weight decay': WEIGHT_DECAY,
+                'schedular/step size': 1,
+                'schedular/gamma': 0.95,
+                'batch size': BATCH_SIZE,
+            },
+            metric_dict={
+                'test auc': best_test_auc,
+                'test acc': best_test_acc,
+                'test loss': best_test_loss
+            }
+        )
 
-    r, p = stats.pearsonr(X, Y)  # 相关系数和P值
-    print('相关系数r为 = %6.3f，p值为 = %6.3f' % (r, p))
+# dataset param
+MAX_USER_NUM = 4151
+QUESTION_MAX_NUM = 16891
+MAX_ATTEMPT_NUM = 5
+MAX_SEQUENCE_LEN = 100
+SKILL_NUM = 111
 
+# solver param
+MODELS_CHECKPOINTS_DIR = './models_checkpoints'
+TENSORBOARD_LOG_DIR = './tensorboard_logs'
+
+# model param
+EMBEDDING_DIM = 200
+HIDDEN_DIM = 200
+DROP_OUT = 0.3
+
+# train param
+OPTIMIZER_TYPE = 'AdamW'
+FREEZE_MF = True
+PRETRAIN_MF = False
+USE_PRETRAINED_MF = True
+BATCH_SIZE = 512
+LR = 0.01
+CUDA = 'cuda:0'
+WEIGHT_DECAY = 0.1
+MOMENTUM = 0.9
+EPOCHS = 100
+PATIENCE = 15
 
 if __name__ == '__main__':
     # TODO 1: fix the random seed for reproduction
@@ -199,10 +218,6 @@ if __name__ == '__main__':
     # run()
 
     # TODO 3: test
-    # test_Baseline_DKT()
+    # test_Baseline_DKT(log_name='DKT/SkillLevel/Baseline')
 
-    # test_MFDKT()
-
-    test_PreMFDKT()
-
-    # test_SK()
+    test_MFDKT(log_name='MFDKT/SkillLevel/UserId+SkillId/output/CombineAdd/Dim200')

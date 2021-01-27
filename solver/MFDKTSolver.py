@@ -5,42 +5,109 @@ import sklearn.metrics
 import torch
 
 from solver.Solver import Solver
+from torch.utils.tensorboard import SummaryWriter
+import os
 
 
 class MFDKTSolver(Solver):
 
-    def __init__(self, model, log_name, data_path, models_checkpoints_dir, tensorboard_log_dir, optimizer, cuda,
+    def __init__(self, model, models_checkpoints_dir, tensorboard_log_dir, cuda,
                  batch_size,
                  max_sequence_len,
-                 skill_num, num_workers=1):
+                 skill_num):
         super(MFDKTSolver, self).__init__(
             model=model,
-            log_name=log_name,
-            data_path=data_path,
             batch_size=batch_size,
             max_sequence_len=max_sequence_len,
             cuda=cuda,
             models_checkpoints_dir=models_checkpoints_dir,
             tensorboard_log_dir=tensorboard_log_dir,
-            optimizer=optimizer,
-            num_workers=num_workers,
         )
         self.skill_num = skill_num
-        # self.writer.add_graph(
-        #     self.model,
-        #     input_to_model=[
-        #         torch.ones(size=(64, 200)).long(),
-        #         torch.ones(size=(64, 1)).long(),
-        #         torch.ones(size=(64, 200)).long(),
-        #         torch.ones(size=(64, 200)).long(),
-        #         torch.ones(size=(64, 200)).long(),
-        #     ]
-        # )
 
-    def run_one_epoch(self, model, cur_epoch=1, mode=''):
+    def pre_train(self, model, log_name, optimizer, epochs=5):
+        writer = SummaryWriter(log_dir=os.path.join(self.tensorboard_log_dir,log_name))
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 3.0, gamma=0.95)
+
+        for i, (name, param) in enumerate(model.named_parameters()):
+            if 'bn' not in name:
+                writer.add_histogram(name, param, 0)
+
+        for epoch in range(1, epochs + 1):
+            epoch_start_time = time.time()
+
+            train_loss = self.pre_train_one_epoch(model=model, optimizer=optimizer, cur_epoch=epoch)
+
+            print('Pretraining | end of epoch {:3d} | time: {:5.2f}s | lr: {:02.4f} | train loss {:5.4f} | '
+                  'train ppl {:8.4f} |'.format(epoch,
+                                               (time.time() - epoch_start_time),scheduler.get_last_lr()[0],
+                                               train_loss, math.exp(train_loss)))
+            self.save_model(model, path=self.models_checkpoints_dir + '/' + log_name + '.pt')
+
+            writer.add_scalar('LOSS/train', train_loss, epoch)
+
+            for i, (name, param) in enumerate(model.named_parameters()):
+                if 'bn' not in name:
+                    writer.add_histogram(name, param, epoch)
+
+            scheduler.step()
+
+    def pre_train_one_epoch(self, model, optimizer, cur_epoch=1):
+        model = model.to(self.device)
+        model.train()
+        total_loss = 0.
+        start_time = time.time()
+        batch_id = 0
+        log_interval = 5
+
+        for data in self.data_loader['train']:
+
+            optimizer.zero_grad()
+
+            input1 = torch.repeat_interleave(data['user_id'].view(-1, 1), repeats=self.skill_num+1, dim=1)
+            input2 = data['skill_id_sequence']
+            label = data['skill_states']
+            cur_batch_size = label.size()[0]
+
+            output = model(
+                user_id_sequence = input1.to(self.device),
+                skill_id_sequence = input2.to(self.device),
+            ).cpu()
+
+            loss = torch.nn.MSELoss()(
+                output.view(cur_batch_size, -1),
+                label.view(cur_batch_size, -1)
+            )
+
+            loss.backward()
+
+            total_loss += loss.item() * cur_batch_size
+
+            optimizer.step()
+
+            if batch_id % log_interval == 0 and batch_id > 0:
+
+                elapsed = time.time() - start_time
+                print('| epoch {:3d} | {:5d}/{:5d} batches | '
+                      'ms/batch {:5.2f} | '
+                      'loss {:5.3f} | ppl {:8.3f}'.format(
+                    cur_epoch, batch_id, len(self.data_loader['train'].dataset) // self.batch_size,
+                                         elapsed * 1000 / log_interval,
+                    loss.item(), math.exp(loss.item())))
+
+            start_time = time.time()
+            batch_id += 1
+
+        return total_loss / (len(self.data_loader['train'].dataset) - 1)
+
+    def run_one_epoch(self, model, optimizer='', cur_epoch=1, mode='', freezeMF=False):
         model = model.to(self.device)
         if mode == 'train':
             model.train()
+            if freezeMF:
+                model.MF.eval()
+                for param in model.MF.parameters():
+                    param.requires_grad = False
         else:
             model.eval()
 
@@ -53,8 +120,8 @@ class MFDKTSolver(Solver):
         total_output = []
 
         for data in self.data_loader[mode]:
-
-            self.optimizer.zero_grad()
+            if mode=='train':
+                optimizer.zero_grad()
 
             input1 = torch.where(data['correctness_sequence'] == 1, data['skill_id_sequence'] + self.skill_num,
                                  data['skill_id_sequence'])
@@ -64,7 +131,7 @@ class MFDKTSolver(Solver):
             query = data['query_skill_id']
             cur_batch_size = label.size()[0]
 
-            output = self.model(
+            output = model(
                 main_input = input1.to(self.device),  # skill_id_sequence + correctness_sequence
                 target_id = query.to(self.device),
                 user_id_sequence = input2.to(self.device),  # user_id_sequence
@@ -84,17 +151,15 @@ class MFDKTSolver(Solver):
 
             # 防止梯度爆炸的梯度截断，梯度超过0.5就截断
             if mode == 'train':
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
+                # torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
                 loss.backward()
-                self.optimizer.step()
+                optimizer.step()
 
                 if batch_id % log_interval == 0 and batch_id > 0:
                     elapsed = time.time() - start_time
-                    print('| epoch {:3d} | {:5d}/{:5d} batches | '
-                          'lr {:02.4f} | ms/batch {:5.2f} | '
+                    print('| epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} | '
                           'loss {:5.3f} | ppl {:8.3f}'.format(
                         cur_epoch, batch_id, len(self.data_loader[mode].dataset) // self.batch_size,
-                        self.scheduler.get_last_lr()[0],
                                              elapsed * 1000 / log_interval,
                         loss.item(), math.exp(loss.item())))
 
