@@ -23,7 +23,7 @@ class DKTSolver(Solver):
         )
         self.skill_num = skill_num
 
-    def run_one_epoch(self, model, optimizer='', cur_epoch=1, mode='', freezeMF=False):
+    def run_one_epoch(self, model, optimizer='', cur_epoch=1, mode='', freezeMF=True):
         model = model.to(self.device)
         if mode == 'train':
             model.train()
@@ -33,7 +33,7 @@ class DKTSolver(Solver):
         total_loss = 0.
         start_time = time.time()
         batch_id = 0
-        log_interval = 200
+        log_interval = 2
         total_prediction = []
         total_label = []
         total_output = []
@@ -43,10 +43,14 @@ class DKTSolver(Solver):
                 optimizer.zero_grad()
 
             # SkillLevel Input
-            input = torch.where(data['correctness_sequence'] == 1, data['skill_id_sequence'] + self.skill_num,
-                                data['skill_id_sequence'])
-            label = data['query_correctness']
-            query = data['query_skill_id']
+            input = torch.where(
+                data['correctness_sequence'] == 1,
+                data['skill_id_sequence'] + self.skill_num,
+                data['skill_id_sequence']
+            )
+            label = data['next_correctness_sequence']
+            query = data['next_skill_id_sequence']
+            mask = data['mask']
             cur_batch_size = label.size()[0]
 
             output = self.model(
@@ -54,16 +58,20 @@ class DKTSolver(Solver):
                 target_id = query.to(self.device)
             ).cpu()
 
+            output = torch.masked_select(input = output, mask = mask)
+            label = torch.masked_select(input = label, mask = mask)
+
             loss = torch.nn.BCELoss()(
                 output,
                 label
             )
+
             total_loss += loss.item() * cur_batch_size
 
             prediction = torch.where(output > 0.5, 1., 0.)
-            total_prediction.extend(prediction.squeeze(-1).detach().numpy())
-            total_label.extend(label.squeeze(-1).detach().numpy())
-            total_output.extend(output.squeeze(-1).detach().numpy())
+            total_prediction.extend(prediction.view(-1).detach().numpy())
+            total_label.extend(label.view(-1).detach().numpy())
+            total_output.extend(output.view(-1).detach().numpy())
 
             # 防止梯度爆炸的梯度截断，梯度超过5就截断
             if mode == 'train':
@@ -87,5 +95,6 @@ class DKTSolver(Solver):
 
         auc = sklearn.metrics.roc_auc_score(total_label, total_output)
         acc = sklearn.metrics.accuracy_score(total_label, total_prediction)
+
 
         return total_loss / (len(self.data_loader[mode].dataset) - 1), auc, acc

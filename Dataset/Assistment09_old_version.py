@@ -13,7 +13,7 @@ pd.set_option('max_colwidth', 1000)
 pd.set_option('expand_frame_repr', False)
 
 
-class PretrainAssistment09(data.Dataset):
+class Assistment09(data.Dataset):
     def __init__(self, path='data/skill_builder_data_corrected_small.csv', max_seq_len=20, min_seq_len=5):
         self.path = path
         self.max_seq_len = max_seq_len

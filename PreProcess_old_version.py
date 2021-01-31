@@ -47,38 +47,39 @@ def calculate_and_add_correctness_ratio(df):
     return df
 
 
+# 将同属于一个user id的多行pandas 数据 以一个list 然后存储为str的方式 做成pandas的一行数据
+def sequence_data_augment(sequence, get_len = False, step_size=1):
+    cur_len = len(sequence)
+    sequences = [str(sequence[0:i + 1]) for i in range(0, cur_len, step_size)]
+    seqs_len = []
+    if get_len:
+        seqs_len = [len(sequence[0:i + 1]) for i in range(0, cur_len, step_size)]
+    return sequences, seqs_len
 
-def get_one_user_data(df):
+
+def get_list_df(df, step_size):
+    question_sequences, seqs_len = sequence_data_augment(list(df['problem_id']),get_len=True,step_size=step_size)
     user_id = list(df['user_id'])[0]
-    seq_len = len(list(df['user_id']))
-    question_sequence = str(list(df['problem_id']))
-    skill_id_sequence = str(list(df['skill_id']))
-    same_skill_total_num_sequence = str(list(df['same_skill_total_num']))
-    same_skill_correct_num_sequence = str(list(df['same_skill_correct_num']))
-    attempt_sequence = str(list(df['attempt_count']))
-    correctness_sequence = str(list(df['correct']))
-
-    df = df.drop_duplicates(subset=['skill_id'])
-    SK = [0.5 for i in range(0,111+1)]
-    for index, row in df.iterrows():
-        skill_id = row['skill_id']
-        SK[skill_id] = float(row['same_skill_correct_num']) / float(row['same_skill_total_num'])
+    user_id = [user_id for i in range(len(seqs_len))]
+    skill_id_sequences, _ = sequence_data_augment(list(df['skill_id']),step_size=step_size)
+    same_skill_total_num_sequences, _ = sequence_data_augment(list(df['same_skill_total_num']),step_size=step_size)
+    same_skill_correct_num_sequences, _ = sequence_data_augment(list(df['same_skill_correct_num']),step_size=step_size)
+    attempt_sequences, _ = sequence_data_augment(list(df['attempt_count']),step_size=step_size)
+    correctness_sequences, _ = sequence_data_augment(list(df['correct']),step_size=step_size)
 
     df = pd.DataFrame(
         data={
-            'user_id': [user_id],
-            'seq_len': [seq_len],
-            'question_id_sequence': [question_sequence],
-            'skill_id_sequence': [skill_id_sequence],
-            'same_skill_total_num_sequence': [same_skill_total_num_sequence],
-            'same_skill_correct_num_sequence': [same_skill_correct_num_sequence],
-            'attempt_sequence': [attempt_sequence],
-            'correctness_sequence': [correctness_sequence],
-            'skill_states': [str(SK)]
+            'user_id': user_id,
+            'seq_len': seqs_len,
+            'question_id_sequence': question_sequences,
+            'skill_id_sequence': skill_id_sequences,
+            'same_skill_total_num_sequence': same_skill_total_num_sequences,
+            'same_skill_correct_num_sequence': same_skill_correct_num_sequences,
+            'attempt_sequence': attempt_sequences,
+            'correctness_sequence': correctness_sequences
         },
         columns=['user_id', 'seq_len','question_id_sequence', 'skill_id_sequence',
-                 'same_skill_total_num_sequence', 'same_skill_correct_num_sequence','attempt_sequence', 'correctness_sequence',
-                 'skill_states']
+                 'same_skill_total_num_sequence', 'same_skill_correct_num_sequence','attempt_sequence', 'correctness_sequence']
     )
     return df
 
@@ -131,11 +132,11 @@ def pre_process(root_dir, filename):
     val_df = pd.DataFrame()
     test_df = pd.DataFrame()
 
-    cnt = 0
     for user_id in users_list:
         user_df = grouped_df.get_group(user_id)
-        if (len(user_df)) <= 15:
+        if (len(user_df)) < 50:
             continue
+
         # train val test split
         user_train_df, user_val_df, user_test_df = train_val_test_split(
             user_df,
@@ -149,9 +150,9 @@ def pre_process(root_dir, filename):
         user_test_df = calculate_and_add_correctness_ratio(user_test_df)
 
         # 一个user_id 做成一个 list str 数据
-        user_train_df = get_one_user_data(user_train_df)
-        user_val_df = get_one_user_data(user_val_df)
-        user_test_df = get_one_user_data(user_test_df)
+        user_train_df = get_list_df(user_train_df,step_size=5)
+        user_val_df = get_list_df(user_val_df,step_size=5)
+        user_test_df = get_list_df(user_test_df,step_size=5)
 
         train_df = pd.concat([train_df, user_train_df])
         test_df = pd.concat([test_df, user_test_df])
@@ -162,22 +163,22 @@ def pre_process(root_dir, filename):
     df.to_csv(
         os.path.join(root_dir, filename + '_preprocessed.csv'),
         mode='w',
-        index=False
+        index=0
     )
     train_df.to_csv(
         os.path.join(root_dir, filename + '_preprocessed_train.csv'),
         mode='w',
-        index=False
+        index=0
     )
     test_df.to_csv(
         os.path.join(root_dir, filename + '_preprocessed_test.csv'),
         mode='w',
-        index=False
+        index=0
     )
     val_df.to_csv(
         os.path.join(root_dir, filename + '_preprocessed_val.csv'),
         mode='w',
-        index=False
+        index=0
     )
     print('finish to save data in csv file\n\n')
 

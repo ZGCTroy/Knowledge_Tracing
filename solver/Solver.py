@@ -9,7 +9,6 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 
 from Dataset.Assistment09 import Assistment09
-from Dataset.PretrainAssistment09 import PretrainAssistment09
 
 
 class Solver():
@@ -39,17 +38,10 @@ class Solver():
         self.local_time = str(time.asctime(time.localtime(time.time())))
 
     def load_data(self, path, dataset_type, num_workers=0):
-        # train_dataset = ''
-        # test_dataset = ''
-        # val_dataset = ''
         if dataset_type == 'Assistment09':
             train_dataset = Assistment09(path=path + '_train.csv', max_seq_len=self.max_sequence_len)
             val_dataset = Assistment09(path=path + '_val.csv', max_seq_len=self.max_sequence_len)
             test_dataset = Assistment09(path=path + '_test.csv', max_seq_len=self.max_sequence_len)
-        if dataset_type == 'PretrainAssistment09':
-            train_dataset = PretrainAssistment09(path=path + '_train.csv', skill_num=self.skill_num)
-            val_dataset = PretrainAssistment09(path=path + '_val.csv', skill_num=self.skill_num)
-            test_dataset = PretrainAssistment09(path=path + '_test.csv', skill_num=self.skill_num)
 
         self.data_loader['train'] = torch.utils.data.DataLoader(
             train_dataset,
@@ -75,9 +67,13 @@ class Solver():
     def run_one_epoch(self, model, optimizer='', cur_epoch=1, mode='', freezeMF=False):
         raise NotImplementedError
 
-    def train(self, model, log_name, epochs, optimizer, freezeMF=False, patience = 5):
-        writer = SummaryWriter(log_dir=self.tensorboard_log_dir + '/' + log_name)
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1.0, gamma=0.95)
+    def train(self, model, log_name, epochs, optimizer, freezeMF=False, patience = 5, step_size = 1,
+        gamma = 0.95):
+        log_dir = self.tensorboard_log_dir + '/' + log_name +'/' + self.local_time
+        # if os.path.exists(self.tensorboard_log_dir + '/' + log_name):
+        #     os.remove(self.tensorboard_log_dir + '/' + log_name)
+        writer = SummaryWriter(log_dir=log_dir)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size, gamma=gamma)
 
         for i, (name, param) in enumerate(model.named_parameters()):
             if 'bn' not in name:
@@ -161,8 +157,8 @@ class Solver():
                 best_val_loss = val_loss
                 best_val_auc = val_auc
                 best_val_acc = val_acc
-                self.best_model = model
-                self.save_model(model, path=self.models_checkpoints_dir + '/' + log_name + '.pt')
+
+                self.save_model(model, path=self.models_checkpoints_dir + '/' + log_name+'/' + self.local_time + '.pt')
             else:
                 cur_patience -= 1
                 if cur_patience == 0:
@@ -178,8 +174,8 @@ class Solver():
 
         loss, auc, acc = self.run_one_epoch(model, mode=mode)
         print('=' * 89)
-        print('{}| test | loss {:5.2f} | ppl {:8.2f} | auc {:5.2f} | acc {:5.2f}'.format(
-            model.model_name, loss, math.exp(loss), auc, acc))
+        print('{}| {} | loss {:5.4f} | ppl {:8.4f} | auc {:5.4f} | acc {:5.4f}'.format(
+            model.model_name, mode, loss, math.exp(loss), auc, acc))
         print('=' * 89)
 
         return loss, auc, acc
@@ -188,6 +184,9 @@ class Solver():
         print('New model is better, start saving ......')
         if not os.path.exists(os.path.dirname(path)):
             os.makedirs(os.path.dirname(path))
+        else:
+            if os.path.exists(path):
+                os.remove(path)
         torch.save(model.state_dict(), path)
         print('Save model in {} successfully\n'.format(path))
 
@@ -197,3 +196,4 @@ class Solver():
             print('Read model in {} successfully\n'.format(path))
         else:
             print('Cannot find {}, use the initial model\n'.format(path))
+        return model

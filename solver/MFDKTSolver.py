@@ -25,9 +25,10 @@ class MFDKTSolver(Solver):
         )
         self.skill_num = skill_num
 
-    def pre_train(self, model, log_name, optimizer, epochs=5):
+    def pre_train(self, model, log_name, optimizer, epochs=5,step_size = 1,
+        gamma = 0.95):
         writer = SummaryWriter(log_dir=os.path.join(self.tensorboard_log_dir,log_name))
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 3.0, gamma=0.95)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size, gamma=gamma)
 
         for i, (name, param) in enumerate(model.named_parameters()):
             if 'bn' not in name:
@@ -58,16 +59,17 @@ class MFDKTSolver(Solver):
         total_loss = 0.
         start_time = time.time()
         batch_id = 0
-        log_interval = 5
+        log_interval = 1
 
         for data in self.data_loader['train']:
 
             optimizer.zero_grad()
 
-            input1 = torch.repeat_interleave(data['user_id'].view(-1, 1), repeats=self.skill_num+1, dim=1)
-            input2 = data['skill_id_sequence']
             label = data['skill_states']
             cur_batch_size = label.size()[0]
+            input1 = torch.repeat_interleave(data['user_id'].view(-1, 1), repeats=self.skill_num+1, dim=1)
+            input2 = torch.LongTensor([i for i in range(0,self.skill_num + 1)])
+            input2 = torch.repeat_interleave(input2,repeats=cur_batch_size,dim=0).view(cur_batch_size,-1)
 
             output = model(
                 user_id_sequence = input1.to(self.device),
@@ -114,21 +116,22 @@ class MFDKTSolver(Solver):
         total_loss = 0.
         start_time = time.time()
         batch_id = 0
-        log_interval = 200
+        log_interval = 2
         total_prediction = []
         total_label = []
         total_output = []
 
         for data in self.data_loader[mode]:
-            if mode=='train':
+            if mode =='train':
                 optimizer.zero_grad()
 
             input1 = torch.where(data['correctness_sequence'] == 1, data['skill_id_sequence'] + self.skill_num,
                                  data['skill_id_sequence'])
             input2 = torch.repeat_interleave(data['user_id'].view(-1, 1), repeats=self.max_sequence_len, dim=1)
             input3 = data['skill_id_sequence']
-            label = data['query_correctness']
-            query = data['query_skill_id']
+            label = data['next_correctness_sequence']
+            query = data['next_skill_id_sequence']
+            mask = data['mask']
             cur_batch_size = label.size()[0]
 
             output = model(
@@ -138,6 +141,9 @@ class MFDKTSolver(Solver):
                 skill_id_sequence = input3.to(self.device),  # skill_id_sequence
             ).cpu()
 
+            output = torch.masked_select(input=output, mask=mask)
+            label = torch.masked_select(input=label, mask=mask)
+
             loss = torch.nn.BCELoss()(
                 output,
                 label
@@ -145,9 +151,9 @@ class MFDKTSolver(Solver):
             total_loss += loss.item() * cur_batch_size
 
             prediction = torch.where(output > 0.5, 1, 0)
-            total_prediction.extend(prediction.squeeze(-1).detach().numpy())
-            total_label.extend(label.squeeze(-1).detach().numpy())
-            total_output.extend(output.squeeze(-1).detach().numpy())
+            total_prediction.extend(prediction.view(-1).detach().numpy())
+            total_label.extend(label.view(-1).detach().numpy())
+            total_output.extend(output.view(-1).detach().numpy())
 
             # 防止梯度爆炸的梯度截断，梯度超过0.5就截断
             if mode == 'train':

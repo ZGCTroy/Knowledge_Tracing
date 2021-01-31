@@ -1,9 +1,6 @@
 import torch
 import torch.nn as nn
 
-PAD_INDEX = 0
-
-
 class DKT(nn.Module):
     """
     LSTM based model
@@ -14,22 +11,42 @@ class DKT(nn.Module):
         self.model_name = 'DKT'
         self.hidden_dim = hidden_dim
         self.num_layers = num_layers
-        self.encoder = nn.Embedding(
-            num_embeddings=2 * skill_num + 1,
-            embedding_dim=embedding_dim,
-            padding_idx=PAD_INDEX,
+        self.output_dim = output_dim
+        self.encoder = nn.Sequential(
+            nn.Embedding(
+                num_embeddings=2 * skill_num + 1,
+                embedding_dim=embedding_dim,
+                padding_idx=0,
+            ),
+            nn.Dropout(dropout)
         )
+
         self.lstm = nn.LSTM(embedding_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=dropout)
-        self.decoder = nn.Linear(hidden_dim, output_dim)
-        self.dropLayer = nn.Dropout(dropout)
-        self.MLP = nn.Sequential(
-            nn.Linear(output_dim, hidden_dim),
+
+        self.decoder = nn.Sequential(
             nn.Dropout(dropout),
-            nn.ReLU(),
             nn.Linear(hidden_dim, output_dim),
-            nn.Dropout(dropout),
-            nn.ReLU()
+            nn.Sigmoid()
         )
+
+        # self.decoder = nn.Sequential(
+        #     nn.Dropout(dropout),
+        #     nn.ReLU(),
+        #     nn.Linear(hidden_dim, hidden_dim),
+        #     nn.Dropout(dropout),
+        #     nn.ReLU(),
+        #     nn.Linear(hidden_dim, output_dim),
+        #     nn.Sigmoid()
+        # )
+
+    def init_hidden(self, batch_size):
+        """
+        initialize hidden layer as zero tensor
+        batch_size: single integer
+        """
+        weight = next(self.parameters())
+        return (weight.new_zeros(self.num_layers, batch_size, self.hidden_dim),
+                weight.new_zeros(self.num_layers, batch_size, self.hidden_dim))
 
     def forward(self, input, target_id):
         """
@@ -38,24 +55,27 @@ class DKT(nn.Module):
         target_id: (batch_size)
         return output, a tensor of shape (batch_size, 1), representing the probability of correctly answering the qt
         """
+
+        # TODO 1: Encoder
         embedded_input = self.encoder(input)
-        embedded_input = self.dropLayer(embedded_input)
 
-        output, _ = self.lstm(embedded_input)
-        output = self.dropLayer(output)
+        # TODO 2: LSTM
+        batch_size = input.shape[0]
+        hidden = self.init_hidden(batch_size)
+        ht, ct = self.lstm(embedded_input,(hidden[0].detach(), hidden[1].detach()))
+        # hT = ht[:, -1, :]  # the last timestamp
 
-        # hidden_dim --> question_embedding_dim (skill num)
-        output = self.decoder(output[:, -1, :])  # (batch_size, embedding_dim) ,embedding_dim = skill_num 表示该学生当前的对所有知识的掌握水平
-        output = self.MLP(output)
+        # TODO 3: Decoder
 
+        output = self.decoder(ht)
+
+        # TODO 4: Query skill state of skill id
         # 1 : target_id 即 skill id, 取出output 中 第skill_id 的值
-        output = torch.gather(output, -1, target_id)
-
+        # output = torch.gather(output, -1, target_id)
+        output = torch.gather(output, dim=2, index = target_id.unsqueeze(dim=2)).squeeze(-1)
         # 2 : weighted
         # query_embedded = self._encoder(target_id).view(batch_size,-1)
         # output = output * query_embedded
         # output = torch.sum(output,dim=1,keepdim=True)
-
-        output = torch.nn.Sigmoid()(output)
 
         return output
