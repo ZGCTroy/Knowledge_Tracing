@@ -81,7 +81,7 @@ class MF(nn.Module):
         P_bias = self.P_bias(user_id_sequence)
         Q_bias = self.Q_bias(skill_id_sequence)
 
-        output = P * Q + P_bias + Q_bias
+        output = P * Q  + P_bias + Q_bias
         output = self.decoder(output)
         output = torch.sigmoid(output)
 
@@ -130,8 +130,19 @@ class MFDKT(nn.Module):
             nn.Dropout(dropout)
         )
 
-        self.LSTM = nn.LSTM(embedding_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=dropout)
-        self.MF = MF(user_num=user_num, skill_num=skill_num, embedding_dim=hidden_dim)
+        self.LSTM = nn.LSTM(
+            embedding_dim,
+            hidden_dim,
+            num_layers=num_layers,
+            batch_first=True,
+            dropout=dropout
+        )
+
+        self.MF = MF(
+            user_num=user_num,
+            skill_num=skill_num,
+            embedding_dim=hidden_dim
+        )
 
         self.decoder = nn.Sequential(
             nn.Dropout(dropout),

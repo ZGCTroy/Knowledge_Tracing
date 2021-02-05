@@ -76,6 +76,9 @@ class MFDKTSolver(Solver):
                 skill_id_sequence = input2.to(self.device),
             ).cpu()
 
+            output = torch.masked_select(input=output.squeeze(-1), mask=data['skill_states_mask'])
+            label = torch.masked_select(input=label, mask=data['skill_states_mask'])
+
             loss = torch.nn.MSELoss()(
                 output.view(cur_batch_size, -1),
                 label.view(cur_batch_size, -1)

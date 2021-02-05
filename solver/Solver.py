@@ -8,8 +8,8 @@ import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from Dataset.Assistment09 import Assistment09
-
+from Dataset.Assistment import Assistment
+from Dataset.Assistment_new_version import Assistment_new_version
 
 class Solver():
     def __init__(self, model, models_checkpoints_dir, tensorboard_log_dir, max_sequence_len=200, cuda='cpu', batch_size=32):
@@ -38,10 +38,13 @@ class Solver():
         self.local_time = str(time.asctime(time.localtime(time.time())))
 
     def load_data(self, path, dataset_type, num_workers=0):
-        if dataset_type == 'Assistment09':
-            train_dataset = Assistment09(path=path + '_train.csv', max_seq_len=self.max_sequence_len)
-            val_dataset = Assistment09(path=path + '_val.csv', max_seq_len=self.max_sequence_len)
-            test_dataset = Assistment09(path=path + '_test.csv', max_seq_len=self.max_sequence_len)
+        if dataset_type in ['Assistment09','Assistment15', 'Assistment17']:
+            train_dataset = Assistment_new_version(path=path + '.csv', max_seq_len=self.max_sequence_len, mode='train')
+            val_dataset = Assistment_new_version(path=path + '.csv', max_seq_len=self.max_sequence_len, mode='val')
+            test_dataset = Assistment_new_version(path=path + '.csv', max_seq_len=self.max_sequence_len, mode='test')
+            # train_dataset = Assistment(path=path + '_train.csv', max_seq_len=self.max_sequence_len)
+            # val_dataset = Assistment(path=path + '_val.csv', max_seq_len=self.max_sequence_len)
+            # test_dataset = Assistment(path=path + '_test.csv', max_seq_len=self.max_sequence_len)
 
         self.data_loader['train'] = torch.utils.data.DataLoader(
             train_dataset,
