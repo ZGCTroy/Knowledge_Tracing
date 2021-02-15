@@ -23,10 +23,19 @@ class DKTSolver(Solver):
         )
         self.skill_num = skill_num
 
-    def run_one_epoch(self, model, optimizer='', cur_epoch=1, mode='', freezeMF=True):
+    def run_one_epoch(self, model, optimizer_info={}, cur_epoch=1, mode='', freezeMF=True):
         model = model.to(self.device)
         if mode == 'train':
             model.train()
+            optimizer = torch.optim.AdamW(
+                [
+                    {'params': model.encoder.parameters(), 'lr': optimizer_info['lr']},
+                    {'params': model.LSTM.parameters(), 'lr': optimizer_info['lr']},
+                    {'params': model.decoder.parameters(), 'lr': optimizer_info['lr']},
+                ],
+                lr=optimizer_info['lr'],
+                weight_decay=optimizer_info['weight_decay']
+            )
         else:
             model.eval()
 
@@ -39,27 +48,24 @@ class DKTSolver(Solver):
         total_output = []
 
         for data in self.data_loader[mode]:
-            if mode == 'train':
-                optimizer.zero_grad()
 
             # SkillLevel Input
             input = torch.where(
                 data['correctness_sequence'] == 1,
-                data['skill_id_sequence'] + self.skill_num,
-                data['skill_id_sequence']
+                data['problem_id_sequence'] + self.skill_num,
+                data['problem_id_sequence']
             )
             label = data['next_correctness_sequence']
-            query = data['next_skill_id_sequence']
-            mask = data['mask']
+            query = data['next_problem_id_sequence']
             cur_batch_size = label.size()[0]
 
-            output = self.model(
+            output = model(
                 input = input.to(self.device),
                 target_id = query.to(self.device)
             ).cpu()
 
-            output = torch.masked_select(input = output, mask = mask)
-            label = torch.masked_select(input = label, mask = mask)
+            output = torch.masked_select(input = output, mask = data['label_mask'])
+            label = torch.masked_select(input = label, mask = data['label_mask'])
 
             loss = torch.nn.BCELoss()(
                 output,
@@ -76,6 +82,7 @@ class DKTSolver(Solver):
             # 防止梯度爆炸的梯度截断，梯度超过5就截断
             if mode == 'train':
                 # torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
+                optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
@@ -97,4 +104,4 @@ class DKTSolver(Solver):
         acc = sklearn.metrics.accuracy_score(total_label, total_prediction)
 
 
-        return total_loss / (len(self.data_loader[mode].dataset) - 1), auc, acc
+        return model, total_loss / (len(self.data_loader[mode].dataset) - 1), auc, acc

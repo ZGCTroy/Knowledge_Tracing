@@ -6,7 +6,7 @@ import sklearn
 import torch
 from torch import utils
 
-from Dataset.Assistment import Assistment09
+from Dataset.old_version.Assistment import Assistment09
 
 
 class MyDKTSolver():

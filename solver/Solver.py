@@ -3,13 +3,13 @@ from __future__ import print_function, division
 import math
 import os
 import time
-import numpy as np
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
+from Dataset.Assistment_splitSequence import Assistment_splitSequence
 from Dataset.Assistment import Assistment
-from Dataset.Assistment_new_version import Assistment_new_version
+from Dataset.AssistmentBert import AssistmentForBertPrtrain
 
 class Solver():
     def __init__(self, model, models_checkpoints_dir, tensorboard_log_dir, max_sequence_len=200, cuda='cpu', batch_size=32):
@@ -37,14 +37,49 @@ class Solver():
 
         self.local_time = str(time.asctime(time.localtime(time.time())))
 
-    def load_data(self, path, dataset_type, num_workers=0):
-        if dataset_type in ['Assistment09','Assistment15', 'Assistment17']:
-            train_dataset = Assistment_new_version(path=path + '.csv', max_seq_len=self.max_sequence_len, mode='train')
-            val_dataset = Assistment_new_version(path=path + '.csv', max_seq_len=self.max_sequence_len, mode='val')
-            test_dataset = Assistment_new_version(path=path + '.csv', max_seq_len=self.max_sequence_len, mode='test')
-            # train_dataset = Assistment(path=path + '_train.csv', max_seq_len=self.max_sequence_len)
-            # val_dataset = Assistment(path=path + '_val.csv', max_seq_len=self.max_sequence_len)
-            # test_dataset = Assistment(path=path + '_test.csv', max_seq_len=self.max_sequence_len)
+
+    def load_data(self, path, dataset_type, split_sequence = False, pretrain=False, dataset_info={}, num_workers=0):
+        if pretrain:
+            if dataset_type in ['Assistment09', 'Assistment15', 'Assistment17']:
+                train_dataset = AssistmentForBertPrtrain(
+                    path=path + '_train.csv',
+                    max_seq_len=dataset_info['max_seq_len'],
+                    input_vocab_size=dataset_info['input_vocab_size'],
+                    label_vocab_size=dataset_info['label_vocab_size'],
+                    input_name=dataset_info['input_name'],
+                    label_name=dataset_info['label_name'],
+                    trunk_size=dataset_info['trunk_size']
+                )
+                val_dataset = AssistmentForBertPrtrain(
+                    path=path + '_val.csv',
+                    max_seq_len=dataset_info['max_seq_len'],
+                    input_vocab_size=dataset_info['input_vocab_size'],
+                    label_vocab_size=dataset_info['label_vocab_size'],
+                    input_name=dataset_info['input_name'],
+                    label_name=dataset_info['label_name'],
+                    trunk_size=dataset_info['trunk_size']
+                )
+                test_dataset = AssistmentForBertPrtrain(
+                    path=path + '_test.csv',
+                    max_seq_len=dataset_info['max_seq_len'],
+                    input_vocab_size=dataset_info['input_vocab_size'],
+                    label_vocab_size=dataset_info['label_vocab_size'],
+                    input_name=dataset_info['input_name'],
+                    label_name=dataset_info['label_name'],
+                    trunk_size=dataset_info['trunk_size']
+                )
+
+        else:
+            if dataset_type in ['Assistment09','Assistment15', 'Assistment17']:
+                if split_sequence:
+                    train_dataset = Assistment_splitSequence(path=path + '.csv', max_seq_len=self.max_sequence_len, mode='train')
+                    val_dataset = Assistment_splitSequence(path=path + '.csv', max_seq_len=self.max_sequence_len, mode='val')
+                    test_dataset = Assistment_splitSequence(path=path + '.csv', max_seq_len=self.max_sequence_len, mode='test')
+                else:
+                    train_dataset = Assistment(path=path + '_train.csv', max_seq_len=self.max_sequence_len)
+                    val_dataset = Assistment(path=path + '_val.csv', max_seq_len=self.max_sequence_len)
+                    test_dataset = Assistment(path=path + '_test.csv', max_seq_len=self.max_sequence_len)
+
 
         self.data_loader['train'] = torch.utils.data.DataLoader(
             train_dataset,
@@ -70,21 +105,19 @@ class Solver():
     def run_one_epoch(self, model, optimizer='', cur_epoch=1, mode='', freezeMF=False):
         raise NotImplementedError
 
-    def train(self, model, log_name, epochs, optimizer, freezeMF=False, patience = 5, step_size = 1,
+    def train(self, model, log_name, epochs, optimizer_info, freeze=False, patience = 5, step_size = 1,
         gamma = 0.95):
+
         log_dir = self.tensorboard_log_dir + '/' + log_name +'/' + self.local_time
-        # if os.path.exists(self.tensorboard_log_dir + '/' + log_name):
-        #     os.remove(self.tensorboard_log_dir + '/' + log_name)
         writer = SummaryWriter(log_dir=log_dir)
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size, gamma=gamma)
 
         for i, (name, param) in enumerate(model.named_parameters()):
             if 'bn' not in name:
                 writer.add_histogram(name, param, 0)
 
         with torch.no_grad():
-            best_val_loss, best_val_auc, best_val_acc = self.run_one_epoch(model=model,mode='val')
-            best_test_loss, best_test_auc, best_test_acc = self.run_one_epoch(model=model,mode='test')
+            model, best_val_loss, best_val_auc, best_val_acc = self.run_one_epoch(model=model,mode='val')
+            model, best_test_loss, best_test_auc, best_test_acc = self.run_one_epoch(model=model,mode='test')
 
         print('=' * 89)
         print(
@@ -96,36 +129,30 @@ class Solver():
 
         print('start training')
 
-        total_test_loss = []
-        total_test_auc = []
-        total_test_acc = []
         cur_patience = patience
 
         for epoch in range(1, epochs + 1):
             epoch_start_time = time.time()
 
-            train_loss, train_auc, train_acc = self.run_one_epoch(
+            model, train_loss, train_auc, train_acc = self.run_one_epoch(
                 model=model,
-                optimizer=optimizer,
+                optimizer_info=optimizer_info,
                 cur_epoch=epoch,
                 mode='train',
-                freezeMF=freezeMF
+                freeze=freeze
             )
 
             with torch.no_grad():
-                val_loss, val_auc, val_acc = self.run_one_epoch(model, mode='val')
-                test_loss, test_auc, test_acc = self.run_one_epoch(model, mode='test')
-                total_test_auc.append(test_auc)
-                total_test_acc.append(test_acc)
-                total_test_loss.append(test_loss)
+                model, val_loss, val_auc, val_acc = self.run_one_epoch(model, mode='val')
+                model, test_loss, test_auc, test_acc = self.run_one_epoch(model, mode='test')
 
             print()
             print('-' * 89)
             print('| end of epoch {:3d} | time: {:5.2f}s | lr: {:02.4f} | train loss {:5.2f} | '
                   'train ppl {:8.2f} | train AUC {:.5f} | train ACC{:.5f}'.format(epoch,
                                                                                   (time.time() - epoch_start_time),
-                                                                                  scheduler.get_last_lr()[0],
-                                                                                  train_loss, math.exp(val_loss),
+                                                                                  optimizer_info['lr'],
+                                                                                  train_loss, math.exp(train_loss),
                                                                                   train_auc, train_acc))
             print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
                   'valid ppl {:8.2f} | val AUC {:.5f} | val ACC{:.5f}'.format(epoch, (time.time() - epoch_start_time),
@@ -149,7 +176,7 @@ class Solver():
             writer.add_scalar('LOSS/val', val_loss, epoch)
             writer.add_scalar('LOSS/test', test_loss, epoch)
 
-            writer.add_scalar('Learning Rate', scheduler.get_last_lr()[0], epoch)
+            writer.add_scalar('Learning Rate', optimizer_info['lr'], epoch)
 
             for i, (name, param) in enumerate(model.named_parameters()):
                 if 'bn' not in name:
@@ -169,19 +196,21 @@ class Solver():
                     writer.close()
                     break
 
-            scheduler.step()
+            if epoch % step_size == 0:
+                optimizer_info['lr'] = optimizer_info['lr'] * gamma
 
         writer.close()
+        return model
 
     def evaluate(self, model, mode):
 
-        loss, auc, acc = self.run_one_epoch(model, mode=mode)
+        model, loss, auc, acc = self.run_one_epoch(model, mode=mode)
         print('=' * 89)
         print('{}| {} | loss {:5.4f} | ppl {:8.4f} | auc {:5.4f} | acc {:5.4f}'.format(
             model.model_name, mode, loss, math.exp(loss), auc, acc))
         print('=' * 89)
 
-        return loss, auc, acc
+        return model, loss, auc, acc
 
     def save_model(self, model, path):
         print('New model is better, start saving ......')

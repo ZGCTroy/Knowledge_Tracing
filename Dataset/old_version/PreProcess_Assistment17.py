@@ -1,7 +1,6 @@
 import os
 
 import pandas as pd
-import numpy as np
 
 
 
@@ -11,7 +10,6 @@ from data_helper import calculate_and_add_correctness_ratio
 from data_helper import train_val_test_split
 from data_helper import get_one_user_data
 from data_helper import print_info
-from data_helper import setup_seed
 
 
 def pre_process(root_dir, filename):
@@ -20,59 +18,66 @@ def pre_process(root_dir, filename):
     df = pd.read_csv(
         os.path.join(root_dir, filename) + '.csv',
         header=0,
-        usecols=['startTime', 'studentId', 'correct', 'skill','problemId'],
+        usecols=['startTime', 'studentId', 'correct', 'skill'],
     )
     print('successfully read the file :', filename)
 
     # TODO 2 : Dropna , DropDupliates, Sort, ResetIndex
+    # TODO 3 : LabelTransform: user_id, skill_id, problem_id
     df = df.dropna().drop_duplicates()
     df = df.sort_values(by=['studentId', 'startTime'])
-    df = df.reset_index(drop=True)
-
-    # TODO 3 : LabelTransform: user_id, skill_id, problem_id
+    df = df.reset_index()
     df['user_id'] = label_encoding(df['studentId'])
     df['skill_id'] = label_encoding(df['skill'])
-    df['problem_id'] = label_encoding(df['problemId'])
     skill_num = len(df['skill_id'].unique())
-    problem_num = len(df['problem_id'].unique())
-    print('skill num',skill_num)
-    print('problem num',problem_num)
 
-    df = df[['user_id','skill_id','correct','problem_id']]
+    df = df[['user_id','skill_id','correct']]
 
-    # TODO 4: Groupby: user_id
+    # TODO 5: Groupby: user_id
     grouped_df = df.groupby('user_id')
     users_list = list(grouped_df.groups.keys())
-    df = pd.DataFrame()
 
+    df = pd.DataFrame()
+    train_df = pd.DataFrame()
+    val_df = pd.DataFrame()
+    test_df = pd.DataFrame()
+
+    cnt = 0
     for user_id in users_list:
         user_df = grouped_df.get_group(user_id)
         if (len(user_df)) <= 15:
             continue
 
+        # train val test split
+        user_train_df, user_val_df, user_test_df = train_val_test_split(
+            user_df,
+            train_test_ratio=0.7,
+            train_val_ratio=0.8
+        )
+
+        # 计算 skill正确率
+        user_df = calculate_and_add_correctness_ratio(user_df)
+        user_train_df = calculate_and_add_correctness_ratio(user_train_df)
+        user_val_df = calculate_and_add_correctness_ratio(user_val_df)
+        user_test_df = calculate_and_add_correctness_ratio(user_test_df)
+
         # 一个user_id 做成一个 list str 数据
-        user_df = get_one_user_data(user_df, skill_num=skill_num, mode='skill states on all')
+        user_df = get_one_user_data(user_df, skill_num=skill_num)
+        user_train_df = get_one_user_data(user_train_df, skill_num=skill_num)
+        user_val_df = get_one_user_data(user_val_df, skill_num=skill_num)
+        user_test_df = get_one_user_data(user_test_df, skill_num=skill_num)
 
-        # concat
         df = pd.concat([df, user_df])
+        train_df = pd.concat([train_df, user_train_df])
+        test_df = pd.concat([test_df, user_test_df])
+        val_df = pd.concat([val_df, user_val_df])
 
+    # TODO 6: save the csv
     print('start to save data in csv file')
-    print(df.head(10))
     df.to_csv(
         os.path.join(root_dir, filename + '_preprocessed.csv'),
         mode='w',
         index=False
-    )
-
-
-    # TODO 6: split train, val, test
-    # shuffle
-    df = df.sample(frac=1).reset_index(drop=True)
-    # split
-    train_df, val_df, test_df = train_val_test_split(
-        df,
-        train_test_ratio=0.7,
-        train_val_ratio=0.8
     )
 
     train_df.to_csv(
@@ -80,35 +85,25 @@ def pre_process(root_dir, filename):
         mode='w',
         index=False
     )
-
-    val_df.to_csv(
-        os.path.join(root_dir, filename + '_preprocessed_val.csv'),
-        mode='w',
-        index=False
-    )
-
     test_df.to_csv(
         os.path.join(root_dir, filename + '_preprocessed_test.csv'),
         mode='w',
         index=False
     )
-
+    val_df.to_csv(
+        os.path.join(root_dir, filename + '_preprocessed_val.csv'),
+        mode='w',
+        index=False
+    )
     print('finish to save data in csv file\n\n')
 
 
 def run():
-    setup_seed(41)
     setup_pandas()
 
     pre_process(
-        root_dir='../data/Assistment17',
+        root_dir='data/Assistment17',
         filename='anonymized_full_release_competition_dataset'
-    )
-
-    from PathSim import cal_similarity
-    cal_similarity(
-        root_dir='../data/Assistment17',
-        filename='anonymized_full_release_competition_dataset_preprocessed'
     )
 
 run()
