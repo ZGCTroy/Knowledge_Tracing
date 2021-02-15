@@ -50,63 +50,115 @@ CUDA_LAUNCH_BLOCKING=1
 #
 #         return SK
 
+# class MF(nn.Module):
+#     def __init__(self, user_num, skill_num,embedding_dim,dropout):
+#         super(MF, self).__init__()
+#         self.P = nn.Sequential(
+#             nn.Embedding(
+#                 num_embeddings=user_num + 1,
+#                 embedding_dim=embedding_dim,
+#                 padding_idx=0
+#             ),
+#             nn.Dropout(dropout)
+#         )
+#         self.Q = nn.Sequential(
+#             nn.Embedding(
+#                 num_embeddings=skill_num + 1,
+#                 embedding_dim=embedding_dim,
+#                 padding_idx=0
+#             ),
+#             nn.Dropout(dropout)
+#         )
+#         self.P_bias = nn.Embedding(
+#             num_embeddings=user_num + 1,
+#             embedding_dim=embedding_dim,
+#             padding_idx=0
+#         )
+#         self.Q_bias = nn.Embedding(
+#             num_embeddings=skill_num + 1,
+#             embedding_dim=embedding_dim,
+#             padding_idx=0
+#         )
+#         self.decoder = nn.Linear(embedding_dim, 1)
+#
+#     def forward(self, user_id_sequence, skill_id_sequence):
+#         P = self.P(user_id_sequence)
+#         Q = self.Q(skill_id_sequence)
+#         P_bias = self.P_bias(user_id_sequence)
+#         Q_bias = self.Q_bias(skill_id_sequence)
+#         output = P * Q  + P_bias + Q_bias
+#         output = self.decoder(output)
+#         output = torch.sigmoid(output)
+#         return output
+#
+#     def get_embedding_vector(self, user_id_sequence, skill_id_sequence):
+#         P = self.P(user_id_sequence)
+#         Q = self.Q(skill_id_sequence)
+#         P_bias = self.P_bias(user_id_sequence)
+#         Q_bias = self.Q_bias(skill_id_sequence)
+#
+#         output = P * Q + P_bias + Q_bias
+#
+#         return output
+#
+#     def get_SK(self, user_id):
+#         P = self.P(user_id)
+#         Q = self.Q.weight
+#         P_bias = self.P_bias(user_id)
+#         Q_bias = self.Q_bias.weight
+#
+#         SK = torch.matmul(P, Q.transpose(0, 1)) + P_bias + Q_bias.transpose(0, 1)
+#         SK = torch.sigmoid(SK)
+#
+#         return SK
+
 class MF(nn.Module):
-    def __init__(self, user_num, skill_num,embedding_dim,):
+    def __init__(self, user_num, skill_num,embedding_dim,dropout):
         super(MF, self).__init__()
-        self.P = nn.Embedding(
-            num_embeddings=user_num + 1,
-            embedding_dim=embedding_dim,
-            padding_idx=0
+        self.P = nn.Sequential(
+            nn.Embedding(
+                num_embeddings=user_num + 1,
+                embedding_dim=embedding_dim,
+                padding_idx=0
+            ),
+            nn.Dropout(dropout)
         )
-        self.Q = nn.Embedding(
-            num_embeddings=skill_num + 1,
-            embedding_dim=embedding_dim,
-            padding_idx=0
+        self.Q = nn.Sequential(
+            nn.Embedding(
+                num_embeddings=skill_num + 1,
+                embedding_dim=embedding_dim,
+                padding_idx=0
+            ),
+            nn.Dropout(dropout)
         )
-        self.P_bias = nn.Embedding(
-            num_embeddings=user_num + 1,
-            embedding_dim=embedding_dim,
-            padding_idx=0
+
+        self.linear1 = nn.Linear(2*embedding_dim, embedding_dim)
+        self.decoder = nn.Sequential(
+            nn.Dropout(dropout),
+            nn.Linear(embedding_dim, 1),
+            nn.Sigmoid()
         )
-        self.Q_bias = nn.Embedding(
-            num_embeddings=skill_num + 1,
-            embedding_dim=embedding_dim,
-            padding_idx=0
-        )
-        self.decoder = nn.Linear(embedding_dim, 1)
 
     def forward(self, user_id_sequence, skill_id_sequence):
         P = self.P(user_id_sequence)
         Q = self.Q(skill_id_sequence)
-        P_bias = self.P_bias(user_id_sequence)
-        Q_bias = self.Q_bias(skill_id_sequence)
 
-        output = P * Q  + P_bias + Q_bias
-        output = self.decoder(output)
-        output = torch.sigmoid(output)
+        input = torch.cat([P,Q],dim=2)
+
+        embedding_vector = self.linear1(input)
+        output = self.decoder(embedding_vector)
 
         return output
 
     def get_embedding_vector(self, user_id_sequence, skill_id_sequence):
         P = self.P(user_id_sequence)
         Q = self.Q(skill_id_sequence)
-        P_bias = self.P_bias(user_id_sequence)
-        Q_bias = self.Q_bias(skill_id_sequence)
 
-        output = P * Q + P_bias + Q_bias
+        input = torch.cat([P, Q], dim=2)
 
-        return output
+        embedding_vector = self.linear1(input)
 
-    def get_SK(self, user_id):
-        P = self.P(user_id)
-        Q = self.Q.weight
-        P_bias = self.P_bias(user_id)
-        Q_bias = self.Q_bias.weight
-
-        SK = torch.matmul(P, Q.transpose(0, 1)) + P_bias + Q_bias.transpose(0, 1)
-        SK = torch.sigmoid(SK)
-
-        return SK
+        return embedding_vector
 
 class MFDKT(nn.Module):
     """
@@ -141,7 +193,8 @@ class MFDKT(nn.Module):
         self.MF = MF(
             user_num=user_num,
             skill_num=skill_num,
-            embedding_dim=hidden_dim
+            embedding_dim=hidden_dim,
+            dropout=dropout/4
         )
 
         self.decoder = nn.Sequential(
@@ -180,14 +233,14 @@ class MFDKT(nn.Module):
         hidden = self.init_hidden(batch_size)
         LSTM_input = embedded_input
         # LSTM_input = torch.cat([embedded_input, extended_input], dim=2)
-        h, hT = self.LSTM(LSTM_input, (hidden[0].detach(), hidden[1].detach()))
+        ht, hT = self.LSTM(LSTM_input, (hidden[0].detach(), hidden[1].detach()))
 
         # TODO 4 : OUTPUT
-        # decoder_input = h
-        decoder_input = torch.cat([h, extended_input],dim=2)
+        # decoder_input = ht
+        decoder_input = torch.cat([ht, extended_input],dim=2)
         output = self.decoder(decoder_input)
 
         # TODO 5: target_id 即 skill id, 取出output 中 第skill_id 的值
-        output = torch.gather(output, dim=2, index = target_id.unsqueeze(dim=2)).squeeze(-1)
+        output = torch.gather(output, dim=2, index = target_id.unsqueeze(dim=2))
 
-        return output
+        return output.squeeze(-1)
