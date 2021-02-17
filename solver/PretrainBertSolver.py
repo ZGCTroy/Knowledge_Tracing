@@ -35,7 +35,6 @@ class PretrainBertSolver(Solver):
                 train_dataset = AssistmentForBertPrtrain(
                     path=path + '_train.csv',
                     input_vocab_size=dataset_info['input_vocab_size'],
-                    label_vocab_size=dataset_info['label_vocab_size'],
                     input_name=dataset_info['input_name'],
                     label_name=dataset_info['label_name'],
                     trunk_size=dataset_info['trunk_size']
@@ -43,7 +42,6 @@ class PretrainBertSolver(Solver):
                 val_dataset = AssistmentForBertPrtrain(
                     path=path + '_val.csv',
                     input_vocab_size=dataset_info['input_vocab_size'],
-                    label_vocab_size=dataset_info['label_vocab_size'],
                     input_name=dataset_info['input_name'],
                     label_name=dataset_info['label_name'],
                     trunk_size=dataset_info['trunk_size']
@@ -51,7 +49,6 @@ class PretrainBertSolver(Solver):
                 test_dataset = AssistmentForBertPrtrain(
                     path=path + '_test.csv',
                     input_vocab_size=dataset_info['input_vocab_size'],
-                    label_vocab_size=dataset_info['label_vocab_size'],
                     input_name=dataset_info['input_name'],
                     label_name=dataset_info['label_name'],
                     trunk_size=dataset_info['trunk_size']
@@ -62,7 +59,6 @@ class PretrainBertSolver(Solver):
                 train_dataset = AssistmentForBert(
                     path=path + '_train.csv',
                     input_vocab_size=dataset_info['input_vocab_size'],
-                    label_vocab_size=dataset_info['label_vocab_size'],
                     input_name=dataset_info['input_name'],
                     label_name=dataset_info['label_name'],
                     trunk_size=dataset_info['trunk_size']
@@ -70,7 +66,6 @@ class PretrainBertSolver(Solver):
                 val_dataset = AssistmentForBert(
                     path=path + '_val.csv',
                     input_vocab_size=dataset_info['input_vocab_size'],
-                    label_vocab_size=dataset_info['label_vocab_size'],
                     input_name=dataset_info['input_name'],
                     label_name=dataset_info['label_name'],
                     trunk_size=dataset_info['trunk_size']
@@ -78,7 +73,6 @@ class PretrainBertSolver(Solver):
                 test_dataset = AssistmentForBert(
                     path=path + '_test.csv',
                     input_vocab_size=dataset_info['input_vocab_size'],
-                    label_vocab_size=dataset_info['label_vocab_size'],
                     input_name=dataset_info['input_name'],
                     label_name=dataset_info['label_name'],
                     trunk_size=dataset_info['trunk_size']
@@ -162,10 +156,13 @@ class PretrainBertSolver(Solver):
             cur_batch_size = masked_label.size()[0]
 
             embedding_output, nsp_output, mlm_output, task_output = model(
-                src=masked_input,
-                segment_info=segment_info,
-                src_mask=src_mask
+                src=masked_input.to(self.device),
+                segment_info=segment_info.to(self.device),
+                src_mask=src_mask.to(self.device)
             )
+
+            nsp_output = nsp_output.cpu()
+            mlm_output = mlm_output.cpu()
 
             masked_label = torch.masked_select(input=masked_label, mask=valid_label_mask)
             masked_label = masked_label - 1
@@ -174,17 +171,17 @@ class PretrainBertSolver(Solver):
                 input=mlm_output,
                 mask=torch.repeat_interleave(
                     valid_label_mask.unsqueeze(-1),
-                    repeats=self.skill_num,
+                    repeats=mlm_output.size(-1),
                     dim=-1
                 )
-            ).view(-1, self.skill_num)
+            ).view(-1, mlm_output.size(-1))
 
             mlm_loss = torch.nn.CrossEntropyLoss()(input=mlm_output, target=masked_label)
             nsp_loss = torch.nn.CrossEntropyLoss()(input=nsp_output, target=nsp_label)
 
             loss = mlm_loss + nsp_loss
 
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -246,14 +243,14 @@ class PretrainBertSolver(Solver):
             cur_batch_size = label.size()[0]
 
             embedding_output, _, _, output = model(
-                src=input,
-                segment_info=segment_info,
-                src_mask=src_mask
+                src=input.to(self.device),
+                segment_info=segment_info.to(self.device),
+                src_mask=src_mask.to(self.device)
             )
-
+            output = output.cpu()
             output = torch.gather(output, dim=1, index=query-1).view(-1)
 
-            loss = torch.nn.BCELoss()(output, label)
+            loss = torch.nn.BCELoss()(input=output, target=label)
 
             total_loss += loss.item() * cur_batch_size
 
@@ -264,7 +261,7 @@ class PretrainBertSolver(Solver):
 
             # 防止梯度爆炸的梯度截断，梯度超过0.5就截断
             if mode == 'train':
-                # torch.nn.utils.clip_grad_norm_(model.parameters(), 5)
+                # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.5)
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()

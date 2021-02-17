@@ -60,8 +60,6 @@ class PositionalEmbedding(nn.Module):
     def forward(self, x):
         return self.pe[:, :x.size(1)]
 
-
-
 class SegmentEmbedding(nn.Embedding):
     def __init__(self, vocab_size, embed_size, padding_idx):
         super().__init__(num_embeddings=vocab_size, embedding_dim=embed_size, padding_idx=padding_idx)

@@ -4,13 +4,12 @@ import pandas as pd
 import torch
 from torch.utils import data
 
-from .data_helper import setup_seed, setup_pandas
+from Dataset.data_helper import setup_seed, setup_pandas
 
 
 class AssistmentForBertPrtrain(data.Dataset):
     def __init__(self, path='data/skill_builder_data_corrected_preprocessed.csv',
-                 input_name='skill_id_seuqnece', label_name='skill_id_sequence', input_vocab_size=110,
-                 label_vocab_size=110, trunk_size=15):
+                 input_name='skill_id_seuqnece', label_name='skill_id_sequence', input_vocab_size=110,trunk_size=15):
         self.path = path
         self.min_seq_len = 2 * trunk_size
 
@@ -19,7 +18,7 @@ class AssistmentForBertPrtrain(data.Dataset):
             usecols=['user_id', 'seq_len', 'skill_id_sequence', 'problem_id_sequence', 'correctness_sequence'],
         )
         df = df.dropna().drop_duplicates()
-        df = df[df['seq_len'] >= min_seq_len]
+        df = df[df['seq_len'] >= self.min_seq_len]
         df = df.sort_values(by=['user_id'])
         df = df.reset_index()
 
@@ -32,11 +31,10 @@ class AssistmentForBertPrtrain(data.Dataset):
         self.sos_index = input_vocab_size + 1
         self.eos_index = input_vocab_size + 2
         self.mask_index = input_vocab_size + 3
+        self.input_vocab_size = input_vocab_size
 
         self.input_name = input_name
         self.label_name = label_name
-        self.input_vocab_size = input_vocab_size
-        self.label_vocab_size = label_vocab_size
         self.trunk_size = trunk_size
 
         self.preprocess()
@@ -65,10 +63,22 @@ class AssistmentForBertPrtrain(data.Dataset):
         self.data['correctness_sequences'] = [self.strList_to_list(strList, type='int') for strList in
                                               list(self.df['correctness_sequence'])]
 
-        trunk_len = 30
+        self.data['qt+ct_sequences'] = []
+        for id_sequence, correctness_sequence in zip(self.data['skill_id_sequences'],
+                                                     self.data['correctness_sequences']):
+            qt_ct_sequence = []
+            for id, correctness in zip(id_sequence, correctness_sequence):
+                if correctness == 0:
+                    qt_ct_sequence.append(id)
+                elif correctness == 1:
+                    qt_ct_sequence.append(id + self.input_vocab_size / 2)
+            self.data['qt+ct_sequences'].append(qt_ct_sequence)
+
         self.truncated_data['skill_id_sequences'] = self.get_truncated_sequences(self.data['skill_id_sequences'],
                                                                                  self.trunk_size)
         self.truncated_data['problem_id_sequences'] = self.get_truncated_sequences(self.data['problem_id_sequences'],
+                                                                                   self.trunk_size)
+        self.truncated_data['qt+ct_sequences'] = self.get_truncated_sequences(self.data['qt+ct_sequences'],
                                                                                    self.trunk_size)
         self.truncated_data['correctness_sequences'] = self.get_truncated_sequences(self.data['correctness_sequences'],
                                                                                     self.trunk_size)
@@ -76,6 +86,8 @@ class AssistmentForBertPrtrain(data.Dataset):
         self.pair_sequences['skill_id_sequences'] = self.get_pair_sequences(self.truncated_data['skill_id_sequences'])
         self.pair_sequences['problem_id_sequences'] = self.get_pair_sequences(
             self.truncated_data['problem_id_sequences'])
+        self.pair_sequences['qt+ct_sequences'] = self.get_pair_sequences(
+            self.truncated_data['qt+ct_sequences'])
         self.pair_sequences['correctness_sequences'] = self.get_pair_sequences(
             self.truncated_data['correctness_sequences'])
 
@@ -134,7 +146,8 @@ class AssistmentForBertPrtrain(data.Dataset):
         label = self.pair_sequences[self.label_name][index]
         nsp_label = 1
 
-        if random.random() > 0.5:
+        prob = random.random()
+        if prob > 0.5:
             nsp_label = 0
             random_index = random.randrange(0, self.dataset_size)
             input[1] = self.pair_sequences[self.input_name][random_index][1]
@@ -147,13 +160,7 @@ class AssistmentForBertPrtrain(data.Dataset):
         segment_info = [1] + [1] * len(masked_input1) + [1] + [2] * len(masked_input2) + [2]
         masked_input = [self.sos_index] + masked_input1 + [self.eos_index] + masked_input2 + [self.eos_index]
         masked_label = [self.sos_index] + masked_label1 + [self.eos_index] + masked_label2 + [self.eos_index]
-
-        # padding
-        src_mask = [False] * len(masked_input) + [True] * (self.max_seq_len - len(masked_input))
-        valid_label_mask = valid_label_mask + [False] * (self.max_seq_len - len(valid_label_mask))
-        masked_input = masked_input + [self.pad_index] * (self.max_seq_len - len(masked_input))
-        masked_label = masked_label + [self.pad_index] * (self.max_seq_len - len(masked_label))
-        segment_info = segment_info + [self.pad_index] * (self.max_seq_len - len(segment_info))
+        src_mask = [False] * (2 * self.trunk_size + 3)
 
         return {
             'nsp_label': torch.LongTensor([nsp_label]),
@@ -167,8 +174,7 @@ class AssistmentForBertPrtrain(data.Dataset):
 
 class AssistmentForBert(data.Dataset):
     def __init__(self, path='data/skill_builder_data_corrected_preprocessed.csv',
-                 input_name='skill_id_sequences', label_name='skill_id_sequences', query_name='skill_id_querys',input_vocab_size=110,
-                 label_vocab_size=110, trunk_size=15):
+                 input_name='skill_id_sequences', label_name='skill_id_sequences', query_name='skill_id_querys',input_vocab_size=110, trunk_size=15):
         self.path = path
         self.max_seq_len = 999
         self.min_seq_len = trunk_size + 1
@@ -192,12 +198,13 @@ class AssistmentForBert(data.Dataset):
         self.sos_index = input_vocab_size + 1
         self.eos_index = input_vocab_size + 2
         self.mask_index = input_vocab_size + 3
+        self.input_vocab_size = input_vocab_size
 
         self.input_name = input_name
         self.query_name = query_name
         self.label_name = label_name
-        self.input_vocab_size = input_vocab_size
-        self.label_vocab_size = label_vocab_size
+
+
         self.trunk_size = trunk_size
 
         self.truncated_data = {}
@@ -226,25 +233,39 @@ class AssistmentForBert(data.Dataset):
                                              list(self.df['problem_id_sequence'])]
         self.data['correctness_sequences'] = [self.strList_to_list(strList, type='int') for strList in
                                               list(self.df['correctness_sequence'])]
+        self.data['qt+ct_sequences'] = []
+        for id_sequence, correctness_sequence in zip(self.data['skill_id_sequences'],self.data['correctness_sequences']):
+            qt_ct_sequence = []
+            for id,correctness in zip(id_sequence,correctness_sequence):
+                if correctness == 0:
+                    qt_ct_sequence.append(id)
+                elif correctness == 1:
+                    qt_ct_sequence.append(id + self.input_vocab_size/2)
+            self.data['qt+ct_sequences'].append(qt_ct_sequence)
+
         self.truncated_data={
             'skill_id_sequences':[],
             'skill_id_querys':[],
             'problem_id_sequences':[],
             'problem_id_querys':[],
+            'qt+ct_sequences':[],
             'correctness':[]
         }
         for i in range(len(self.data['skill_id_sequences'])):
             total_seq_len = len(self.data['skill_id_sequences'][i])
-            for j in range(0, total_seq_len - self.trunk_size - 1):
+            for j in range(0, total_seq_len - self.trunk_size):
                 self.truncated_data['skill_id_sequences'].append(self.data['skill_id_sequences'][i][j:j + self.trunk_size])
                 self.truncated_data['skill_id_querys'].append(self.data['skill_id_sequences'][i][j + self.trunk_size])
                 self.truncated_data['problem_id_sequences'].append(self.data['problem_id_sequences'][i][j:j + self.trunk_size])
                 self.truncated_data['problem_id_querys'].append(self.data['problem_id_sequences'][i][j + self.trunk_size])
                 self.truncated_data['correctness'].append(self.data['correctness_sequences'][i][j + self.trunk_size])
+                self.truncated_data['qt+ct_sequences'].append(self.data['qt+ct_sequences'][i][j:j + self.trunk_size])
 
     def __getitem__(self, index):
 
         input1 = self.truncated_data[self.input_name][index]
+
+        assert len(input1) == self.trunk_size
 
         segment_info = [1] + [1] * self.trunk_size + [1] + [2] * self.trunk_size + [2]
         input = [self.sos_index] + input1 + [self.eos_index] + [self.pad_index] * self.trunk_size + [self.eos_index]
@@ -271,16 +292,15 @@ class AssistmentForBert(data.Dataset):
 
 
 
-def print_pretrain_data(i, max_seq_len):
-    setup_seed(41)
-    setup_pandas()
+def print_pretrain_data(i, trunk_size):
+
+    path = '../data/Assistment09/skill_builder_data_corrected_preprocessed_val.csv'
     dataset = AssistmentForBertPrtrain(
         path=path,
-        input_vocab_size=110,
-        label_vocab_size=110,
-        input_name='skill_id_sequences',
-        label_name='skill_id_sequences',
-        trunk_size=15
+        input_vocab_size=110*2,
+        input_name='qt+ct_sequences',
+        label_name='qt+ct_sequences',
+        trunk_size=trunk_size
     )
     data = dataset.__getitem__(i)
     print('nsp_label\n', data['nsp_label'])
@@ -288,13 +308,14 @@ def print_pretrain_data(i, max_seq_len):
     print('masked_input\n', data['masked_input'])
     print('masked_label\n', data['masked_label'])
     print('valid_label_mask\n', data['valid_label_mask'])
+    print()
 
 def print_train_data(i, trunk_size):
+    path = '../data/Assistment09/skill_builder_data_corrected_preprocessed_val.csv'
     dataset = AssistmentForBert(
         path=path,
-        input_vocab_size=110,
-        label_vocab_size=110,
-        input_name='skill_id_sequences',
+        input_vocab_size=110*2,
+        input_name='qt+ct_sequences',
         label_name='correctness',
         trunk_size=trunk_size
     )
@@ -304,7 +325,13 @@ def print_train_data(i, trunk_size):
     print('label\n', data['label'])
     print('query\n', data['query'])
     print('segment_info\n', data['segment_info'])
+#
 
-# for i in range(100):
-#     print_train_data(i, max_seq_len=33)
+def test():
+    setup_seed(41)
+    setup_pandas()
+    for i in range(100):
+        # print_train_data(i, trunk_size=5)
+        print_pretrain_data(i, trunk_size=5)
 
+# test()

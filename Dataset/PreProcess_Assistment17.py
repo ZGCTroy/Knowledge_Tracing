@@ -105,10 +105,5 @@ def run():
         filename='anonymized_full_release_competition_dataset'
     )
 
-    from PathSim import cal_similarity
-    cal_similarity(
-        root_dir='../data/Assistment17',
-        filename='anonymized_full_release_competition_dataset_preprocessed'
-    )
-
 run()
+

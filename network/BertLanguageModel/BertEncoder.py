@@ -25,7 +25,7 @@ class BertEncoder(nn.Module):
         self.attn_heads = attn_heads
 
         # embedding for BERT, sum of positional, segment, token embeddings
-        self.embedding_layer = BertInputEmbedding(vocab_size=vocab_size, embedding_dim=hidden_dim, dropout=dropout)
+        self.embedding_layer = BertInputEmbedding(vocab_size=vocab_size, embedding_dim=embedding_dim, dropout=dropout)
 
         # multi-layers transformer blocks, deep network
         self.transformer_encoder = TransformerEncoder(

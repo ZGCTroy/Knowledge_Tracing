@@ -4,6 +4,7 @@ import torch.nn as nn
 class BertLanguageModel(nn.Module):
     def __init__(self, bert_encoder, nsp_decoder, mlm_decoder, task_decoder=None):
         super(BertLanguageModel, self).__init__()
+        self.model_name = 'Bert'
         self.bert_encoder = bert_encoder
 
         self.nsp_decoder = nsp_decoder
@@ -24,11 +25,11 @@ class BertLanguageModel(nn.Module):
         return embedding_output.permute(1,0,2), nsp_output, mlm_output.permute(1,0,2), task_output
 
 class MlmDecoder(nn.Module):
-    def __init__(self, embedding_dim, output_dim=2):
+    def __init__(self, embedding_dim, output_dim=2,dropout=0.2):
         super().__init__()
         self.decoder = nn.Sequential(
+            nn.Dropout(dropout),
             nn.Linear(embedding_dim, output_dim),
-            nn.LogSoftmax(dim=-1)
         )
 
     def forward(self, input):
@@ -36,20 +37,21 @@ class MlmDecoder(nn.Module):
 
 
 class NspDecoder(nn.Module):
-    def __init__(self, embedding_dim, output_dim):
+    def __init__(self, embedding_dim, output_dim,dropout=0.2):
         super().__init__()
         self.decoder = nn.Sequential(
+            nn.Dropout(dropout),
             nn.Linear(embedding_dim, output_dim),
-            nn.LogSoftmax(dim=-1)
         )
 
     def forward(self, input):
         return self.decoder(input)
 
 class TaskDecoder(nn.Module):
-    def __init__(self, embedding_dim, output_dim):
+    def __init__(self, embedding_dim, output_dim, dropout=0.2):
         super().__init__()
         self.decoder = nn.Sequential(
+            nn.Dropout(dropout),
             nn.Linear(embedding_dim, output_dim),
             nn.Sigmoid()
         )
