@@ -13,24 +13,50 @@ class BertInputEmbedding(nn.Module):
         sum of all these features are output of BERTEmbedding
     """
 
-    def __init__(self, vocab_size, embedding_dim, dropout=0.1):
+    def __init__(self, embedding_dim, input_name=[], input_vocab_size={}, dropout=0.1, use_combine_linear=False):
         """
         :param vocab_size: total vocab size
         :param embedding_dim: embedding size of token embedding
         :param dropout: dropout rate
         """
         super().__init__()
-        self.token = TokenEmbedding(vocab_size=vocab_size, embed_size=embedding_dim, padding_idx=0)
+
+        self.tokens = nn.ModuleDict()
+        self.num_input = len(input_name)
+        self.input_name = input_name
+        self.input_vocab_size = input_vocab_size
+
+        for name in input_name:
+            self.tokens[name] = TokenEmbedding(vocab_size=input_vocab_size[name]+4, embed_size=embedding_dim, padding_idx=0)
+
         self.position = PositionalEmbedding(d_model=embedding_dim)
-        self.segment = SegmentEmbedding(vocab_size=3, embed_size=embedding_dim, padding_idx=0)
+        self.segment = SegmentEmbedding(vocab_size=2 + 1, embed_size=embedding_dim, padding_idx=0)
         self.dropout = nn.Dropout(p=dropout)
         self.embedding_dim = embedding_dim
 
-    def forward(self, sequence, segment_label):
-        x = self.token(sequence)
-        x = x + self.position(sequence)
-        x = x + self.segment(segment_label)
-        return self.dropout(x)
+        self.use_combine_linear = use_combine_linear
+        if use_combine_linear:
+            self.combine_linear = nn.Linear(in_features=self.num_input+2,out_features=1)
+
+    def forward(self, inputs, segment_info):
+        seq_len = inputs[self.input_name[0]].size(1)
+        batch_size = inputs[self.input_name[0]].size(0)
+        position_embedding = self.position(seq_len)
+        position_embedding = torch.repeat_interleave(input=position_embedding, repeats=batch_size,dim=0)
+        segment_embedding = self.segment(segment_info)
+        stack = [position_embedding, segment_embedding]
+
+        for name in self.input_name:
+            stack.append(self.tokens[name](inputs[name]))
+
+        stacked_embedding = torch.stack(stack,dim=3)
+
+        if self.use_combine_linear:
+            embedding = self.combine_linear(stacked_embedding).squeeze(-1)
+        else:
+            embedding = torch.sum(stacked_embedding,dim=3).squeeze(-1)
+
+        return self.dropout(embedding)
 
 
 
@@ -57,8 +83,8 @@ class PositionalEmbedding(nn.Module):
         pe = pe.unsqueeze(0)
         self.register_buffer('pe', pe)
 
-    def forward(self, x):
-        return self.pe[:, :x.size(1)]
+    def forward(self, seq_len):
+        return self.pe[:, :seq_len]
 
 class SegmentEmbedding(nn.Embedding):
     def __init__(self, vocab_size, embed_size, padding_idx):

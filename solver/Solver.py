@@ -9,7 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from Dataset.Assistment_splitSequence import Assistment_splitSequence
 from Dataset.Assistment import Assistment
-from Dataset.AssistmentBert import AssistmentForBertPrtrain
+from Dataset.AssistmentForBertTrain import AssistmentForBertTrain
 
 class Solver():
     def __init__(self, model, models_checkpoints_dir, tensorboard_log_dir, max_sequence_len=200, cuda='cpu', batch_size=32):
@@ -105,19 +105,18 @@ class Solver():
     def run_one_epoch(self, model, optimizer='', cur_epoch=1, mode='', freezeMF=False):
         raise NotImplementedError
 
-    def train(self, model, log_name, epochs, optimizer_info, freeze=False, patience = 5, step_size = 1,
-        gamma = 0.95):
+    def train(self, model, log_name, epochs, optimizer_info, freeze=False, patience = 5):
 
         log_dir = self.tensorboard_log_dir + '/' + log_name +'/' + self.local_time
-        writer = SummaryWriter(log_dir=log_dir)
+        self.writer = SummaryWriter(log_dir=log_dir)
 
         for i, (name, param) in enumerate(model.named_parameters()):
             if 'bn' not in name:
-                writer.add_histogram(name, param, 0)
+                self.writer.add_histogram(name, param, 0)
 
         with torch.no_grad():
-            model, best_val_loss, best_val_auc, best_val_acc = self.run_one_epoch(model=model,mode='val')
-            model, best_test_loss, best_test_auc, best_test_acc = self.run_one_epoch(model=model,mode='test')
+            model, best_val_loss, best_val_auc, best_val_acc = self.run_one_epoch(model=model,mode='val',cur_epoch=0)
+            model, best_test_loss, best_test_auc, best_test_acc = self.run_one_epoch(model=model,mode='test',cur_epoch=0)
 
         print('=' * 89)
         print(
@@ -143,8 +142,8 @@ class Solver():
             )
 
             with torch.no_grad():
-                model, val_loss, val_auc, val_acc = self.run_one_epoch(model, mode='val')
-                model, test_loss, test_auc, test_acc = self.run_one_epoch(model, mode='test')
+                model, val_loss, val_auc, val_acc = self.run_one_epoch(model, mode='val',cur_epoch=epoch)
+                model, test_loss, test_auc, test_acc = self.run_one_epoch(model, mode='test',cur_epoch=epoch)
 
             print()
             print('-' * 89)
@@ -158,29 +157,29 @@ class Solver():
                   'valid ppl {:8.2f} | val AUC {:.5f} | val ACC{:.5f}'.format(epoch, (time.time() - epoch_start_time),
                                                                               val_loss, math.exp(val_loss), val_auc,
                                                                               val_acc))
-            print('| end of epoch {:3d} | time: {:5.2f}s | test loss {:5.2f} | '
-                  'test ppl {:8.2f} | test AUC {:.5f} | test ACC{:.5f}'.format(epoch, (time.time() - epoch_start_time),
+            print('| end of epoch {:3d} | time: {:5.2f}s | Test loss {:5.2f} | '
+                  'Test ppl {:8.2f} | Test AUC {:.5f} | Test ACC{:.5f}'.format(epoch, (time.time() - epoch_start_time),
                                                                                test_loss, math.exp(test_loss), test_auc,
                                                                                test_acc))
             print('-' * 89)
 
-            writer.add_scalar('ACC/train', train_acc, epoch)
-            writer.add_scalar('ACC/val', val_acc, epoch)
-            writer.add_scalar('ACC/test', test_acc, epoch)
+            self.writer.add_scalar('ACC/train', train_acc, epoch)
+            self.writer.add_scalar('ACC/val', val_acc, epoch)
+            self.writer.add_scalar('ACC/Test', test_acc, epoch)
 
-            writer.add_scalar('AUC/train', train_auc, epoch)
-            writer.add_scalar('AUC/val', val_auc, epoch)
-            writer.add_scalar('AUC/test', test_auc, epoch)
+            self.writer.add_scalar('AUC/train', train_auc, epoch)
+            self.writer.add_scalar('AUC/val', val_auc, epoch)
+            self.writer.add_scalar('AUC/test', test_auc, epoch)
 
-            writer.add_scalar('LOSS/train', train_loss, epoch)
-            writer.add_scalar('LOSS/val', val_loss, epoch)
-            writer.add_scalar('LOSS/test', test_loss, epoch)
+            self.writer.add_scalar('LOSS/train', train_loss, epoch)
+            self.writer.add_scalar('LOSS/val', val_loss, epoch)
+            self.writer.add_scalar('LOSS/test', test_loss, epoch)
 
-            writer.add_scalar('Learning Rate', optimizer_info['lr'], epoch)
+            self.writer.add_scalar('Learning Rate', optimizer_info['lr'], epoch)
 
             for i, (name, param) in enumerate(model.named_parameters()):
                 if 'bn' not in name:
-                    writer.add_histogram(name, param, epoch)
+                    self.writer.add_histogram(name, param, epoch)
 
             if val_auc > best_val_auc:
                 cur_patience = patience
@@ -193,24 +192,14 @@ class Solver():
                 cur_patience -= 1
                 if cur_patience == 0:
                     print('Early Stop\n\n')
-                    writer.close()
+                    self.writer.close()
                     break
 
-            if epoch % step_size == 0:
-                optimizer_info['lr'] = optimizer_info['lr'] * gamma
+            if epoch % optimizer_info['step_size'] == 0:
+                optimizer_info['lr'] = optimizer_info['lr'] * optimizer_info['gamma']
 
-        writer.close()
+        self.writer.close()
         return model
-
-    def evaluate(self, model, mode):
-
-        model, loss, auc, acc = self.run_one_epoch(model, mode=mode)
-        print('=' * 89)
-        print('{}| {} | loss {:5.4f} | ppl {:8.4f} | auc {:5.4f} | acc {:5.4f}'.format(
-            model.model_name, mode, loss, math.exp(loss), auc, acc))
-        print('=' * 89)
-
-        return model, loss, auc, acc
 
     def save_model(self, model, path):
         print('New model is better, start saving ......')

@@ -86,7 +86,7 @@ class Assistment_splitSequence(data.Dataset):
             end_pos = val_end_pos
             real_len = val_end_pos - train_end_pos
             label_mask = [1] * (val_end_pos - train_end_pos)
-        elif self.mode == 'test':
+        elif self.mode == 'Test':
             start_pos = val_end_pos + 1
             end_pos = test_end_pos
             real_len = test_end_pos - val_end_pos

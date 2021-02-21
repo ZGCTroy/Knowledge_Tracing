@@ -70,7 +70,7 @@ def pre_process(root_dir, filename):
     )
 
 
-    # TODO 6: split train, val, test
+    # TODO 6: split train, val, Test
     # shuffle
     df = df.sample(frac=1).reset_index(drop=True)
     # split

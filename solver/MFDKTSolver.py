@@ -157,7 +157,7 @@ class MFDKTSolver(Solver):
             # if mode == 'train':
             #     input2 = torch.repeat_interleave(data['user_id'].view(-1, 1), repeats=self.max_sequence_len, dim=1)
             #
-            # elif mode in ['val', 'test']:
+            # elif mode in ['val', 'Test']:
             #     top_1_similar_user_id = torch.index_select(input=data['similar_user_id_in_train'], dim=1, index=torch.LongTensor([0]))
             #     input2 = torch.repeat_interleave(top_1_similar_user_id.view(-1, 1), repeats=self.max_sequence_len,
             #                                      dim=1)
